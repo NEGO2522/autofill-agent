@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../contexts/AuthContext";
+import ProfileIcon from "../components/ProfileIcon";
 
 /* ─────────────────────────────────────────────────────────────
    DESIGN TOKENS  — matches Home.jsx / Login.jsx exactly
@@ -88,7 +90,7 @@ const PLANS = [
 ══════════════════════════════════════════════════════════════ */
 
 /* ── NAV ── */
-function Nav({ onCTA }) {
+function Nav({ onCTA, user }) {
   const [scrolled, setScrolled] = useState(false);
   
   useEffect(() => {
@@ -146,29 +148,35 @@ function Nav({ onCTA }) {
         })}
       </div>
 
-      {/* CTA */}
+      {/* CTA - Show different content based on auth state */}
       <div style={{ display:"flex", gap:"0.75rem", alignItems:"center" }}>
-        <button onClick={() => onCTA("login")} style={{
-          background:"none", border:"none", cursor:"pointer",
-          fontSize:"0.8125rem", fontWeight:600,
-          color:"rgba(255,255,255,0.35)", transition:"color .2s",
-          fontFamily:S.font,
-        }}
-          onMouseEnter={e => e.target.style.color="rgba(255,255,255,.7)"}
-          onMouseLeave={e => e.target.style.color="rgba(255,255,255,.35)"}
-        >Sign in</button>
-        <button onClick={() => onCTA("signup")} style={{
-          background:"white", color:"black", border:"none",
-          borderRadius:"0.625rem", padding:"0.5rem 1.125rem",
-          fontSize:"0.8125rem", fontWeight:700,
-          cursor:"pointer", transition:"background .2s, transform .1s",
-          fontFamily:S.font,
-        }}
-          onMouseEnter={e => e.currentTarget.style.background="rgba(255,255,255,.88)"}
-          onMouseLeave={e => e.currentTarget.style.background="white"}
-          onMouseDown={e => e.currentTarget.style.transform="scale(.98)"}
-          onMouseUp={e => e.currentTarget.style.transform="scale(1)"}
-        >Get started free</button>
+        {user ? (
+          <ProfileIcon />
+        ) : (
+          <>
+            <button onClick={() => onCTA("login")} style={{
+              background:"none", border:"none", cursor:"pointer",
+              fontSize:"0.8125rem", fontWeight:600,
+              color:"rgba(255,255,255,0.35)", transition:"color .2s",
+              fontFamily:S.font,
+            }}
+              onMouseEnter={e => e.target.style.color="rgba(255,255,255,.7)"}
+              onMouseLeave={e => e.target.style.color="rgba(255,255,255,.35)"}
+            >Sign in</button>
+            <button onClick={() => onCTA("signup")} style={{
+              background:"white", color:"black", border:"none",
+              borderRadius:"0.625rem", padding:"0.5rem 1.125rem",
+              fontSize:"0.8125rem", fontWeight:700,
+              cursor:"pointer", transition:"background .2s, transform .1s",
+              fontFamily:S.font,
+            }}
+              onMouseEnter={e => e.currentTarget.style.background="rgba(255,255,255,.88)"}
+              onMouseLeave={e => e.currentTarget.style.background="white"}
+              onMouseDown={e => e.currentTarget.style.transform="scale(.98)"}
+              onMouseUp={e => e.currentTarget.style.transform="scale(1)"}
+            >Get started free</button>
+          </>
+        )}
       </div>
     </nav>
   );
@@ -456,13 +464,14 @@ function PlanCard({ plan, onCTA }) {
 ══════════════════════════════════════════════════════════════ */
 export default function Landing() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const handleCTA = (mode="signup") => navigate(`/login?mode=${mode}`);
 
   return (
     <div style={{ minHeight:"100vh", background:S.bg, color:"white", fontFamily:S.font, overflowX:"hidden" }}>
       <style>{CSS}</style>
 
-      <Nav onCTA={handleCTA} />
+      <Nav onCTA={handleCTA} user={user} />
 
       {/* ── HERO (side-by-side on laptop) ── */}
       <section style={{ minHeight:"100vh", display:"flex", alignItems:"center", padding:"120px 2rem 80px", position:"relative", overflow:"hidden" }}>
@@ -527,32 +536,51 @@ export default function Landing() {
 
             {/* CTAs */}
             <div style={{ display:"flex", gap:"0.875rem", flexWrap:"wrap", marginBottom:"3rem" }}>
-              <button onClick={()=>handleCTA("signup")} style={{
-                background:"white", color:"black", border:"none",
-                borderRadius:"0.75rem", padding:"0.875rem 2rem",
-                fontSize:"0.9375rem", fontWeight:700,
-                cursor:"pointer", transition:"all .2s",
-                fontFamily:S.font,
-              }}
-                onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,.88)"}
-                onMouseLeave={e=>e.currentTarget.style.background="white"}
-                onMouseDown={e=>e.currentTarget.style.transform="scale(.98)"}
-                onMouseUp={e=>e.currentTarget.style.transform="scale(1)"}
-              >
-                ⚡ Launch Agent free
-              </button>
-              <button onClick={()=>handleCTA("login")} style={{
-                background:"rgba(255,255,255,0.05)", color:"rgba(255,255,255,0.6)",
-                border:S.border2, borderRadius:"0.75rem", padding:"0.875rem 2rem",
-                fontSize:"0.9375rem", fontWeight:600,
-                cursor:"pointer", transition:"all .2s",
-                fontFamily:S.font,
-              }}
-                onMouseEnter={e=>{ e.currentTarget.style.borderColor="rgba(255,255,255,.2)"; e.currentTarget.style.color="white"; }}
-                onMouseLeave={e=>{ e.currentTarget.style.borderColor="rgba(255,255,255,.09)"; e.currentTarget.style.color="rgba(255,255,255,.6)"; }}
-              >
-                Sign in →
-              </button>
+              {user ? (
+                <button onClick={() => navigate('/home')} style={{
+                  background:"white", color:"black", border:"none",
+                  borderRadius:"0.75rem", padding:"0.875rem 2rem",
+                  fontSize:"0.9375rem", fontWeight:700,
+                  cursor:"pointer", transition:"all .2s",
+                  fontFamily:S.font,
+                }}
+                  onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,.88)"}
+                  onMouseLeave={e=>e.currentTarget.style.background="white"}
+                  onMouseDown={e=>e.currentTarget.style.transform="scale(.98)"}
+                  onMouseUp={e=>e.currentTarget.style.transform="scale(1)"}
+                >
+                  ⚡ Go to Dashboard
+                </button>
+              ) : (
+                <>
+                  <button onClick={()=>handleCTA("signup")} style={{
+                    background:"white", color:"black", border:"none",
+                    borderRadius:"0.75rem", padding:"0.875rem 2rem",
+                    fontSize:"0.9375rem", fontWeight:700,
+                    cursor:"pointer", transition:"all .2s",
+                    fontFamily:S.font,
+                  }}
+                    onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,.88)"}
+                    onMouseLeave={e=>e.currentTarget.style.background="white"}
+                    onMouseDown={e=>e.currentTarget.style.transform="scale(.98)"}
+                    onMouseUp={e=>e.currentTarget.style.transform="scale(1)"}
+                  >
+                    ⚡ Launch Agent free
+                  </button>
+                  <button onClick={()=>handleCTA("login")} style={{
+                    background:"rgba(255,255,255,0.05)", color:"rgba(255,255,255,0.6)",
+                    border:S.border2, borderRadius:"0.75rem", padding:"0.875rem 2rem",
+                    fontSize:"0.9375rem", fontWeight:600,
+                    cursor:"pointer", transition:"all .2s",
+                    fontFamily:S.font,
+                  }}
+                    onMouseEnter={e=>{ e.currentTarget.style.borderColor="rgba(255,255,255,.2)"; e.currentTarget.style.color="white"; }}
+                    onMouseLeave={e=>{ e.currentTarget.style.borderColor="rgba(255,255,255,.09)"; e.currentTarget.style.color="rgba(255,255,255,.6)"; }}
+                  >
+                    Sign in →
+                  </button>
+                </>
+              )}
             </div>
 
             {/* Social proof */}
@@ -643,12 +671,12 @@ export default function Landing() {
       <div style={{ borderTop:S.border }}>
         <section style={{ maxWidth:760, margin:"0 auto", padding:"7rem 2rem", textAlign:"center" }}>
           <h2 style={{ fontSize:"clamp(2.25rem,5vw,3.75rem)", fontWeight:800, letterSpacing:"-0.05em", lineHeight:1, color:"white", marginBottom:"1rem" }}>
-            Ready to stop filling<br />forms manually?
+            {user ? "Ready to automate more forms?" : "Ready to stop filling<br />forms manually?"}
           </h2>
           <p style={{ fontSize:"0.9375rem", color:S.muted, marginBottom:"2.5rem" }}>
-            Join 3,000+ teams who automated the tedious stuff.
+            {user ? "Continue to your dashboard to manage your form automation." : "Join 3,000+ teams who automated the tedious stuff."}
           </p>
-          <button onClick={()=>handleCTA("signup")} style={{
+          <button onClick={() => user ? navigate('/home') : handleCTA("signup")} style={{
             background:"white", color:"black", border:"none",
             borderRadius:"0.75rem", padding:"1rem 2.5rem",
             fontSize:"1rem", fontWeight:700,
@@ -660,7 +688,7 @@ export default function Landing() {
             onMouseDown={e=>e.currentTarget.style.transform="scale(.98)"}
             onMouseUp={e=>e.currentTarget.style.transform="scale(1)"}
           >
-            ⚡ Launch Agent — it's free
+            {user ? "⚡ Go to Dashboard" : "⚡ Launch Agent — it's free"}
           </button>
         </section>
       </div>
