@@ -464,7 +464,10 @@ export default function Home() {
         <div style={{ position: "relative", zIndex: 10, display: "flex", height: "100%", flexDirection: "column", padding: "1.5rem 1rem" }}>
 
           {/* Brand */}
-          <div style={{ marginBottom: "2rem", display: "flex", alignItems: "center", gap: "0.625rem" }}>
+          <div onClick={() => navigate("/")} style={{ marginBottom: "2rem", display: "flex", alignItems: "center", gap: "0.625rem", cursor: "pointer", transition: "all 0.15s" }}
+            onMouseEnter={e => { e.currentTarget.style.opacity = "0.8"; }}
+            onMouseLeave={e => { e.currentTarget.style.opacity = "1"; }}
+          >
             <div style={{ display: "flex", height: "2rem", width: "2rem", flexShrink: 0, alignItems: "center", justifyContent: "center", borderRadius: "0.625rem", backgroundColor: "white", color: "black", fontSize: "0.875rem", fontWeight: 900 }}>⚡</div>
             <span style={{ fontSize: "0.9375rem", fontWeight: 700, letterSpacing: "-0.02em" }}>AutoSlay</span>
           </div>
