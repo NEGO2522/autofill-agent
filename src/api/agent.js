@@ -5,17 +5,26 @@
  * In prod: VITE_API_URL/api/agent/run-stream  (your Render backend URL)
  */
 export const runAgent = (url, profile, { onMessage, onDone, onError }) => {
-  const base = import.meta.env.VITE_API_URL || "";   // e.g. https://autofill-agent-api.onrender.com
+  const base = import.meta.env.VITE_API_URL || "";
 
-  const params = new URLSearchParams({
-    url,
-    name:      profile.name,
-    firstName: profile.firstName || "",
-    lastName:  profile.lastName  || "",
-    email:     profile.email,
-    phone:     profile.phone   || "",
-    company:   profile.company || "",
-    message:   profile.message || "",
+  const params = new URLSearchParams();
+
+  // Add every profile field that has a value
+  const fields = [
+    "url","name","firstName","lastName","email","phone",
+    "dob","gender",
+    "address1","address2","city","state","pincode","country","nationality",
+    "organization","jobTitle","experience","linkedin","github","website","skills",
+    "qualification","fieldOfStudy","university","graduationYear",
+    "teamName","teamSize","projectName","projectDescription",
+    "bio","message","formContext",
+  ];
+
+  params.set("url", url);
+  fields.forEach(key => {
+    if (key !== "url" && profile[key] !== undefined && profile[key] !== "") {
+      params.set(key, profile[key]);
+    }
   });
 
   const es = new EventSource(`${base}/api/agent/run-stream?${params.toString()}`);

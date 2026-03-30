@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   signInWithEmailAndPassword,
@@ -21,6 +21,16 @@ export default function Login() {
   const [error, setError]             = useState("");
   const [loading, setLoading]         = useState(false);
   const [googleLoading, setGLoading]  = useState(false);
+
+  // Redirect logged-in users away from login page
+  useEffect(() => {
+    const unsubscribe = auth.onAuthStateChanged((user) => {
+      if (user) {
+        navigate("/home");
+      }
+    });
+    return unsubscribe;
+  }, [navigate]);
 
   const clearErr = () => setError("");
 

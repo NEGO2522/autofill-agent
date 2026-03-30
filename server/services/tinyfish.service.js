@@ -1,12 +1,89 @@
 import axios from "axios";
 
 /**
+ * Builds a universal, context-aware goal prompt for ANY type of form.
+ * The agent will intelligently map profile data to whatever fields exist.
+ */
+function buildGoal(url, profile) {
+  const fullName = `${profile.firstName || ""} ${profile.lastName || ""}`.trim() || profile.name || "";
+
+  return `
+You are an expert form-filling AI agent. Your task is to fill out a web form completely and accurately.
+
+## TARGET URL
+${url}
+
+## USER PROFILE (use this data to fill the form — map fields intelligently)
+- Full Name: ${fullName}
+- First Name: ${profile.firstName || ""}
+- Last Name: ${profile.lastName || ""}
+- Email: ${profile.email || ""}
+- Phone / Mobile: ${profile.phone || ""}
+- Date of Birth: ${profile.dob || ""}
+- Gender: ${profile.gender || ""}
+- Address Line 1: ${profile.address1 || ""}
+- Address Line 2: ${profile.address2 || ""}
+- City: ${profile.city || ""}
+- State / Province: ${profile.state || ""}
+- PIN Code / ZIP / Postal Code: ${profile.pincode || ""}
+- Country: ${profile.country || "India"}
+- Nationality: ${profile.nationality || "Indian"}
+- Organization / Company / College / Institution: ${profile.organization || ""}
+- Job Title / Designation / Role: ${profile.jobTitle || ""}
+- Years of Experience: ${profile.experience || ""}
+- LinkedIn URL: ${profile.linkedin || ""}
+- GitHub URL: ${profile.github || ""}
+- Portfolio / Website URL: ${profile.website || ""}
+- Skills / Technologies (comma-separated): ${profile.skills || ""}
+- Highest Qualification / Degree: ${profile.qualification || ""}
+- Field of Study / Branch / Specialization: ${profile.fieldOfStudy || ""}
+- University / School Name: ${profile.university || ""}
+- Graduation Year: ${profile.graduationYear || ""}
+- Team Name (for hackathons/events): ${profile.teamName || ""}
+- Team Size: ${profile.teamSize || ""}
+- Project Name / Idea Title: ${profile.projectName || ""}
+- Project Description / Idea: ${profile.projectDescription || ""}
+- Cover Letter / Statement of Purpose / Bio / About Me: ${profile.bio || ""}
+- Message / How can we help / Additional Info: ${profile.message || ""}
+- Form Context / Purpose: ${profile.formContext || "Fill this form completely and accurately"}
+
+## INSTRUCTIONS
+1. Navigate to the URL and wait for the page to fully load.
+2. Identify ALL visible and interactive form fields on the page — inputs, textareas, dropdowns, radio buttons, checkboxes, date pickers, file uploads, sliders, etc.
+3. For EACH field, intelligently determine what data it needs by reading:
+   - The field label
+   - Placeholder text
+   - Surrounding context / section heading
+   - Field name / ID attribute
+4. Map the most appropriate value from the user profile above to each field.
+5. For fields not covered by the profile (e.g. "Why do you want to join?", "Describe your project"):
+   - Use the "Cover Letter / Bio" field if relevant
+   - Otherwise generate a sensible, professional response based on the user's profile context
+6. Handle special field types:
+   - Dropdowns: select the best matching option
+   - Radio buttons: select the most appropriate option
+   - Checkboxes: check relevant ones (e.g. terms & conditions, skills, interests)
+   - Date fields: use the correct format for that field
+   - File uploads: skip unless a file path is provided
+   - Multi-step forms: complete each step before proceeding to the next
+   - CAPTCHA: solve if possible, otherwise note it
+7. After filling ALL fields:
+   - Scroll to check for any missed fields
+   - Accept terms/privacy policy checkboxes if present
+   - Click the Submit / Apply / Register / Send / Next button
+   - Wait for a success/confirmation message
+8. Report each action as you take it.
+
+## IMPORTANT
+- Do NOT skip any field — fill everything you can
+- If a required field has no matching profile data, make a reasonable professional inference
+- This could be any type of form: job application, hackathon registration, government portal, contact form, event signup, college application, visa form, insurance, etc.
+- Adapt your strategy to the specific form you encounter
+`.trim();
+}
+
+/**
  * Streams TinyFish SSE events directly to the Express response.
- * The client receives real-time progress from the agent.
- *
- * @param {string} url
- * @param {object} profile  { name, email, phone }
- * @param {import("express").Response} res  – must already have SSE headers set
  */
 export const streamAgent = async (url, profile, res) => {
   const send = (event, data) => {
@@ -19,32 +96,15 @@ export const streamAgent = async (url, profile, res) => {
       "https://agent.tinyfish.ai/v1/automation/run-sse",
       {
         url,
-        goal: `
-          Open the page at ${url}.
-          Find and fill out every visible input field in the contact/inquiry form using the details below.
-          Match fields by their label text (case-insensitive). Fill ALL fields you can find.
-
-          - First Name / Name: ${profile.firstName || profile.name}
-          - Last Name: ${profile.lastName || ""}
-          - Full Name (if single name field): ${profile.name}
-          - Work Email / Email: ${profile.email}
-          - Phone / Phone Number / Mobile: ${profile.phone || ""}
-          - Company / Organisation / Company Name: ${profile.company || ""}
-          - Message / Description / How can we help: ${profile.message || "I am interested in learning more about your services."}
-
-          After filling ALL visible fields:
-          1. Check the privacy/terms checkbox if present.
-          2. Click the Submit / Send / Send Message button.
-          3. Wait for a success confirmation message.
-        `.trim(),
+        goal: buildGoal(url, profile),
       },
       {
         headers: {
           "X-API-Key": process.env.TINYFISH_API_KEY,
           "Content-Type": "application/json",
         },
-        responseType: "stream",      // stream the response instead of buffering
-        timeout: 180_000,            // 3 min max
+        responseType: "stream",
+        timeout: 300_000, // 5 min for complex multi-step forms
       }
     );
 
@@ -53,7 +113,7 @@ export const streamAgent = async (url, profile, res) => {
     response.data.on("data", (chunk) => {
       buffer += chunk.toString();
       const lines = buffer.split("\n");
-      buffer = lines.pop();          // keep incomplete last line
+      buffer = lines.pop();
 
       for (const line of lines) {
         const trimmed = line.trim();
@@ -64,10 +124,8 @@ export const streamAgent = async (url, profile, res) => {
 
         try {
           const evt = JSON.parse(raw);
-          // Forward every event to the frontend
           send("message", evt);
 
-          // Detect final/done event and close cleanly
           const isDone =
             evt.type === "result" ||
             evt.type === "done" ||
@@ -79,7 +137,8 @@ export const streamAgent = async (url, profile, res) => {
             evt.status === "finished" ||
             evt.finished === true ||
             evt.done === true ||
-            (typeof evt.message === "string" && /(success|submitted|done|complet)/i.test(evt.message));
+            (typeof evt.message === "string" &&
+              /(success|submitted|done|complet|registered|applied|thank)/i.test(evt.message));
 
           if (isDone) {
             send("done", { success: true, message: "Form submitted successfully!" });
@@ -87,7 +146,6 @@ export const streamAgent = async (url, profile, res) => {
             return;
           }
         } catch {
-          // non-JSON line — forward as plain log
           if (raw) send("log", { message: raw });
         }
       }
@@ -103,7 +161,6 @@ export const streamAgent = async (url, profile, res) => {
       send("error", { message: "Stream error: " + err.message });
       res.end();
     });
-
   } catch (error) {
     const msg =
       error.response?.data

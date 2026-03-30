@@ -2,13 +2,30 @@ import { streamAgent } from "../services/tinyfish.service.js";
 
 /**
  * SSE endpoint — streams TinyFish agent progress to the browser in real time.
- * GET  /api/agent/run-stream?url=...&name=...&email=...&phone=...
+ * Accepts a universal profile that works for any form type.
+ * GET /api/agent/run-stream?url=...&email=...&firstName=...&...
  */
 export const runAgentStream = async (req, res) => {
-  const { url, name, firstName, lastName, email, phone, company, message } = req.query;
+  const {
+    url,
+    // Basic identity
+    name, firstName, lastName, email, phone,
+    dob, gender,
+    // Address
+    address1, address2, city, state, pincode, country, nationality,
+    // Professional
+    organization, jobTitle, experience,
+    linkedin, github, website, skills,
+    // Education
+    qualification, fieldOfStudy, university, graduationYear,
+    // Event / Hackathon
+    teamName, teamSize, projectName, projectDescription,
+    // General
+    bio, message, formContext,
+  } = req.query;
 
-  if (!url || !(firstName || name) || !email) {
-    res.status(400).json({ success: false, message: "Missing url, name, or email." });
+  if (!url || !email) {
+    res.status(400).json({ success: false, message: "Missing required fields: url and email." });
     return;
   }
 
@@ -16,24 +33,46 @@ export const runAgentStream = async (req, res) => {
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
-  res.setHeader("X-Accel-Buffering", "no");   // disable nginx buffering if present
+  res.setHeader("X-Accel-Buffering", "no");
   res.flushHeaders();
 
-  // Keep-alive ping every 15 s so the connection doesn't time out
-  const keepAlive = setInterval(() => {
-    res.write(": ping\n\n");
-  }, 15_000);
-
+  const keepAlive = setInterval(() => res.write(": ping\n\n"), 15_000);
   req.on("close", () => clearInterval(keepAlive));
 
   await streamAgent(url, {
-    name:      name || `${firstName || ""} ${lastName || ""}`.trim(),
-    firstName: firstName || "",
-    lastName:  lastName  || "",
+    name:              name || `${firstName || ""} ${lastName || ""}`.trim(),
+    firstName:         firstName || "",
+    lastName:          lastName  || "",
     email,
-    phone:   phone   || "",
-    company: company || "",
-    message: message || "",
+    phone:             phone      || "",
+    dob:               dob        || "",
+    gender:            gender     || "",
+    address1:          address1   || "",
+    address2:          address2   || "",
+    city:              city       || "",
+    state:             state      || "",
+    pincode:           pincode    || "",
+    country:           country    || "India",
+    nationality:       nationality|| "Indian",
+    organization:      organization   || "",
+    jobTitle:          jobTitle       || "",
+    experience:        experience     || "",
+    linkedin:          linkedin       || "",
+    github:            github         || "",
+    website:           website        || "",
+    skills:            skills         || "",
+    qualification:     qualification  || "",
+    fieldOfStudy:      fieldOfStudy   || "",
+    university:        university     || "",
+    graduationYear:    graduationYear || "",
+    teamName:          teamName       || "",
+    teamSize:          teamSize       || "",
+    projectName:       projectName    || "",
+    projectDescription:projectDescription || "",
+    bio:               bio     || "",
+    message:           message || "",
+    formContext:       formContext || "",
   }, res);
+
   clearInterval(keepAlive);
 };
