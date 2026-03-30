@@ -156,7 +156,7 @@ function Nav({ onCTA, user }) {
       </div>
 
       {/* CTA - Show different content based on auth state */}
-      <div style={{ display:"flex", gap:"0.75rem", alignItems:"center" }}>
+      <div style={{ display:"flex", gap:"2.5rem", alignItems:"center" }}>
         {user ? (
           <ProfileIcon />
         ) : (
