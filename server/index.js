@@ -28,7 +28,7 @@ app.use(cors({
 
 app.use(express.json());
 
-app.get("/", (_, res) => res.json({ status: "Autofill Agent API is running 🚀" }));
+app.get("/", (_, res) => res.json({ status: "AutoSlay API is running 🚀" }));
 app.get("/health", (_, res) => res.json({ ok: true }));
 app.use("/api/agent", agentRoutes);
 

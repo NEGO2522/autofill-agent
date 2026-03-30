@@ -117,7 +117,7 @@ export default function Login() {
               borderRadius: "0.75rem", backgroundColor: "white",
               color: "black", fontSize: "1rem", fontWeight: 900,
             }}>⚡</div>
-            <span style={{ fontSize: "1.0625rem", fontWeight: 700, letterSpacing: "-0.02em", color: "white" }}>AutoFill Agent</span>
+            <span style={{ fontSize: "1.0625rem", fontWeight: 700, letterSpacing: "-0.02em", color: "white" }}>AutoSlay</span>
           </div>
 
           {/* Hero copy */}
@@ -156,7 +156,7 @@ export default function Login() {
               lineHeight: 1.75,
               color: "rgba(255,255,255,0.35)",
             }}>
-              AutoFill Agent reads any web form and completes it instantly using your saved profile. One click. Every form.
+              AutoSlay reads any web form and completes it instantly using your saved profile. One click. Every form.
             </p>
 
             <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
@@ -181,7 +181,7 @@ export default function Login() {
             </div>
           </div>
 
-          <div style={{ fontSize: "0.75rem", color: "rgba(255,255,255,0.15)" }}>© 2025 AutoFill Agent · MIT License</div>
+          <div style={{ fontSize: "0.75rem", color: "rgba(255,255,255,0.15)" }}>© 2025 AutoSlay · MIT License</div>
         </div>
       </div>
 
@@ -203,7 +203,7 @@ export default function Login() {
               borderRadius: "0.75rem", backgroundColor: "white",
               color: "black", fontSize: "0.875rem", fontWeight: 900,
             }}>⚡</div>
-            <span style={{ fontSize: "1rem", fontWeight: 700, color: "white" }}>AutoFill Agent</span>
+            <span style={{ fontSize: "1rem", fontWeight: 700, color: "white" }}>AutoSlay</span>
           </div>
 
           {/* Tab toggle */}
@@ -248,7 +248,7 @@ export default function Login() {
             </h2>
             <p style={{ marginTop: "0.25rem", fontSize: "0.875rem", color: "rgba(255,255,255,0.35)" }}>
               {mode === "login"
-                ? "Sign in to your AutoFill Agent account"
+                ? "Sign in to your AutoSlay account"
                 : "Create your free account in seconds"}
             </p>
           </div>

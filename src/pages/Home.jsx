@@ -60,50 +60,11 @@ const S = {
 };
 
 /* ══════════════════════════════════════════════════════
-   DETECT MISSING FIELDS FROM URL HINTS
-  (heuristic: based on URL keywords → suggest what's likely needed)
+   AGENT-REPORTED MISSING FIELDS PANEL
+  (only shown when the agent finds fields on the real page
+   that have no matching value in the user's profile)
 ══════════════════════════════════════════════════════ */
-function detectLikelyMissingFields(url, profile) {
-  if (!url) return [];
-  const u = url.toLowerCase();
-
-  // Which field keys are likely relevant for this URL
-  const relevant = new Set();
-
-  // Always relevant
-  ["firstName","lastName","email","phone"].forEach(k => relevant.add(k));
-
-  if (u.includes("job") || u.includes("career") || u.includes("hire") || u.includes("work") || u.includes("recruit") || u.includes("apply")) {
-    ["organization","jobTitle","experience","skills","linkedin","github","bio","resumeLink","qualification","fieldOfStudy"].forEach(k => relevant.add(k));
-  }
-  if (u.includes("hack") || u.includes("event") || u.includes("tech") || u.includes("competition") || u.includes("contest") || u.includes("devfolio") || u.includes("unstop")) {
-    ["teamName","teamSize","teamRole","projectName","projectDescription","techStack","githubRepo","skills","github","college"].forEach(k => relevant.add(k));
-  }
-  if (u.includes("scholar") || u.includes("fellowship") || u.includes("grant") || u.includes("stipend")) {
-    ["qualification","fieldOfStudy","university","graduationYear","cgpa","bio","whyUs","category","aadhaar","pan","income"].forEach(k => relevant.add(k));
-  }
-  if (u.includes("gov") || u.includes(".gov") || u.includes("nsp") || u.includes("digilocker") || u.includes("uidai") || u.includes("umang") || u.includes("india")) {
-    ["aadhaar","pan","dob","gender","category","disability","address1","city","state","pincode","nationality"].forEach(k => relevant.add(k));
-  }
-  if (u.includes("college") || u.includes("admission") || u.includes("university") || u.includes("campus")) {
-    ["qualification","fieldOfStudy","university","graduationYear","cgpa","entranceExam","entranceScore","bio"].forEach(k => relevant.add(k));
-  }
-  if (u.includes("contact") || u.includes("connect") || u.includes("reach")) {
-    ["bio","message","website"].forEach(k => relevant.add(k));
-  }
-
-  // Find which relevant keys are empty in profile
-  return [...relevant].filter(k => k in EMPTY_PROFILE && !profile[k]?.trim()).slice(0, 10);
-}
-
-/* get field meta from key */
-function getFieldMeta(key) {
-  for (const sec of SECTIONS) {
-    const f = sec.fields.find(f => f.key === key);
-    if (f) return { ...f, sectionLabel: sec.label, sectionIcon: sec.icon };
-  }
-  return null;
-}
+// (no pre-run heuristic — fields come from the agent after it scans the page)
 
 /* ══════════════════════════════════════════════════════
    TINY SHARED COMPONENTS
@@ -155,12 +116,13 @@ function Textarea({ value, onChange, placeholder, disabled, rows = 3 }) {
 ══════════════════════════════════════════════════════ */
 function HistoryCard({ entry, onRerun }) {
   const [expanded, setExpanded] = useState(false);
-  const isSuccess = entry.status === "success";
-  const isError   = entry.status === "error";
-  const statusColor = isSuccess ? "#34d399" : isError ? "#f87171" : "rgba(255,255,255,0.4)";
-  const statusBg    = isSuccess ? "rgba(52,211,153,0.06)" : isError ? "rgba(248,113,113,0.06)" : "rgba(255,255,255,0.04)";
-  const statusBdr   = isSuccess ? "rgba(52,211,153,0.2)" : isError ? "rgba(248,113,113,0.2)" : "rgba(255,255,255,0.08)";
-  const statusLabel = isSuccess ? "✅ Success" : isError ? "❌ Failed" : "⚪ Unknown";
+  const isSuccess     = entry.status === "success";
+  const isError       = entry.status === "error";
+  const isUnconfirmed = entry.status === "unconfirmed";
+  const statusColor = isSuccess ? "#34d399" : isError ? "#f87171" : isUnconfirmed ? "#fbbf24" : "rgba(255,255,255,0.4)";
+  const statusBg    = isSuccess ? "rgba(52,211,153,0.06)" : isError ? "rgba(248,113,113,0.06)" : isUnconfirmed ? "rgba(251,191,36,0.06)" : "rgba(255,255,255,0.04)";
+  const statusBdr   = isSuccess ? "rgba(52,211,153,0.2)" : isError ? "rgba(248,113,113,0.2)" : isUnconfirmed ? "rgba(251,191,36,0.2)" : "rgba(255,255,255,0.08)";
+  const statusLabel = isSuccess ? "✅ Confirmed" : isError ? "❌ Failed" : isUnconfirmed ? "⚠️ Unconfirmed" : "⚪ Unknown";
 
   let displayUrl = entry.url;
   try { displayUrl = new URL(entry.url).hostname + new URL(entry.url).pathname; } catch {}
@@ -224,62 +186,65 @@ function HistoryCard({ entry, onRerun }) {
 }
 
 /* ══════════════════════════════════════════════════════
-   MISSING FIELDS PANEL
+   AGENT-REQUESTED MISSING FIELDS PANEL
+  Shown mid-run when the agent finds fields on the REAL page
+  that have no match in the user profile.
+  Fields come from the agent — NOT from URL guessing.
 ══════════════════════════════════════════════════════ */
-function MissingFieldsPanel({ missingKeys, tempValues, onChange, onNavigate, running }) {
-  if (!missingKeys.length) return null;
+function AgentMissingFieldsPanel({ agentFields, tempValues, onChange, onNavigate }) {
+  // agentFields: [{ label, type, required }] from the agent's NEEDS_INPUT event
+  if (!agentFields || agentFields.length === 0) return null;
 
   return (
-    <div style={{ margin: "0 1.25rem 0", borderRadius: "0.875rem", border: "1px solid rgba(251,191,36,0.2)", backgroundColor: "rgba(251,191,36,0.04)", overflow: "hidden" }}>
+    <div style={{ margin: "0.875rem 1.25rem 0", borderRadius: "0.875rem", border: "1px solid rgba(251,191,36,0.25)", backgroundColor: "rgba(251,191,36,0.04)", overflow: "hidden" }} className="animate-fade-up">
       {/* header */}
       <div style={{ padding: "0.875rem 1.125rem", borderBottom: "1px solid rgba(251,191,36,0.1)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "0.625rem" }}>
-          <span style={{ fontSize: "1rem" }}>⚠️</span>
+          <span style={{ fontSize: "1.125rem" }}>🤖</span>
           <div>
-            <p style={{ margin: 0, fontSize: "0.8125rem", fontWeight: 700, color: "rgba(251,191,36,0.9)" }}>Missing fields detected for this URL</p>
-            <p style={{ margin: 0, fontSize: "0.6875rem", color: "rgba(255,255,255,0.3)" }}>Fill these now — the AI will use them for better autofill</p>
+            <p style={{ margin: 0, fontSize: "0.8125rem", fontWeight: 700, color: "rgba(251,191,36,0.9)" }}>
+              Agent found fields it can’t fill
+            </p>
+            <p style={{ margin: 0, fontSize: "0.6875rem", color: "rgba(255,255,255,0.3)" }}>
+              These fields exist on the actual page but aren’t in your profile
+            </p>
           </div>
         </div>
         <button onClick={onNavigate} style={{ background: "none", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "0.5rem", padding: "0.375rem 0.75rem", fontSize: "0.6875rem", fontWeight: 600, color: "rgba(255,255,255,0.4)", cursor: "pointer", fontFamily: S.font, whiteSpace: "nowrap", transition: "all 0.15s" }}
           onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.2)"; e.currentTarget.style.color = "white"; }}
           onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)"; e.currentTarget.style.color = "rgba(255,255,255,0.4)"; }}
-        >📝 Full Profile →</button>
+        >📝 Save to Profile →</button>
       </div>
 
-      {/* fields */}
+      {/* fields — rendered from agent-reported labels */}
       <div style={{ padding: "1rem 1.125rem", display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "0.875rem" }} className="missing-grid">
-        {missingKeys.map(key => {
-          const meta = getFieldMeta(key);
-          if (!meta) return null;
+        {agentFields.map((field, i) => {
+          const isTextarea = field.type === "textarea";
+          const key = field.label; // use label as key since these are freeform from the agent
           return (
-            <div key={key} style={{ gridColumn: (meta.textarea || meta.span === 2) ? "1 / -1" : "auto" }}>
-              <Label>
-                <span style={{ color: "rgba(255,255,255,0.18)", fontSize: "0.5rem", marginRight: "0.25rem" }}>{meta.sectionIcon}</span>
-                {meta.label}
-              </Label>
-              {meta.textarea ? (
+            <div key={i} style={{ gridColumn: isTextarea ? "1 / -1" : "auto" }}>
+              <Label>{field.label}{field.required && <span style={{ color: "rgba(248,113,113,0.6)", marginLeft: 3 }}>*</span>}</Label>
+              {isTextarea ? (
                 <Textarea
                   value={tempValues[key] || ""}
                   onChange={e => onChange(key, e.target.value)}
-                  placeholder={meta.placeholder}
-                  disabled={running}
+                  placeholder={`Enter your ${field.label.toLowerCase()}…`}
                   rows={2}
                 />
               ) : (
                 <Input
-                  type={meta.type || "text"}
+                  type={field.type === "email" ? "email" : field.type === "tel" ? "tel" : "text"}
                   value={tempValues[key] || ""}
                   onChange={e => onChange(key, e.target.value)}
-                  placeholder={meta.placeholder}
-                  disabled={running}
+                  placeholder={`Enter your ${field.label.toLowerCase()}…`}
                 />
               )}
             </div>
           );
         })}
       </div>
-      <div style={{ padding: "0.625rem 1.125rem 0.875rem", fontSize: "0.625rem", color: "rgba(255,255,255,0.2)" }}>
-        💡 These values are merged with your saved profile for this run only. <button onClick={onNavigate} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.35)", cursor: "pointer", fontSize: "0.625rem", padding: 0, textDecoration: "underline", fontFamily: S.font }}>Save them permanently →</button>
+      <div style={{ padding: "0.5rem 1.125rem 0.875rem", fontSize: "0.625rem", color: "rgba(255,255,255,0.2)" }}>
+        💡 The agent is still running — it will pick up these values when it re-attempts the unfilled fields.
       </div>
     </div>
   );
@@ -303,9 +268,10 @@ export default function Home() {
   const [navOpen,    setNavOpen]    = useState(false);
   const [history,    setHistory]    = useState([]);
 
-  // missing fields panel
-  const [missingKeys,  setMissingKeys]  = useState([]);
-  const [tempValues,   setTempValues]   = useState({});
+  // agent-reported missing fields (populated mid-run from NEEDS_INPUT events)
+  const [agentFields,  setAgentFields]  = useState([]); // [{ label, type, required }]
+  const [tempValues,   setTempValues]   = useState({});  // label → user-typed value
+  const [missingKeys,  setMissingKeys]  = useState([]);  // missing fields detected from URL
 
   const esRef   = useRef(null);
   const stepRef = useRef(0);
@@ -381,7 +347,7 @@ export default function Home() {
   /* ── detect missing fields whenever URL changes ── */
   useEffect(() => {
     if (!url || !profileLoaded) { setMissingKeys([]); return; }
-    const missing = detectLikelyMissingFields(url, profile);
+    const missing = [];
     setMissingKeys(missing);
     // carry over any already-typed temp values for new keys
     setTempValues(prev => {
@@ -427,13 +393,19 @@ export default function Home() {
         const guessed = guessStep(text, stepRef.current);
         if (guessed) { stepRef.current = guessed; setStep(guessed); }
       },
-      onDone() {
+      onDone(data) {
         stepRef.current = 6; setStep(6);
-        setStatus("success"); setMsg("Form submitted successfully!");
+        const confirmed = data?.confirmed !== false; // true unless explicitly false
+        const doneMsg = data?.message || (confirmed
+          ? "Form submitted — confirmation detected!"
+          : "Agent finished. Check the page to confirm submission.");
+        setStatus(confirmed ? "success" : "warning");
+        setMsg(doneMsg);
         saveHistoryEntry({
           id: runStart, timestamp: runStart,
           url: runUrl, profile: runProfile,
-          status: "success", stepsReached: 6, logs: runLogs,
+          status: confirmed ? "success" : "unconfirmed",
+          stepsReached: 6, logs: runLogs,
         });
       },
       onError(errMsg) {
@@ -470,10 +442,11 @@ export default function Home() {
   const totalFields = Object.keys(EMPTY_PROFILE).length;
 
   const pillCfg = {
-    idle:    { dot: "rgba(255,255,255,0.2)", text: "rgba(255,255,255,0.3)",  label: "Ready",    bdr: "rgba(255,255,255,0.08)", bg: "rgba(255,255,255,0.04)" },
-    running: { dot: "white",                text: "rgba(255,255,255,0.7)",  label: "Running",  bdr: "rgba(255,255,255,0.15)", bg: "rgba(255,255,255,0.06)" },
-    success: { dot: "#34d399",              text: "#34d399",                label: "Complete", bdr: "rgba(52,211,153,0.2)",   bg: "rgba(52,211,153,0.06)"  },
-    error:   { dot: "#f87171",              text: "#f87171",                label: "Error",    bdr: "rgba(248,113,113,0.2)",  bg: "rgba(248,113,113,0.06)" },
+    idle:    { dot: "rgba(255,255,255,0.2)", text: "rgba(255,255,255,0.3)",  label: "Ready",       bdr: "rgba(255,255,255,0.08)",  bg: "rgba(255,255,255,0.04)" },
+    running: { dot: "white",                text: "rgba(255,255,255,0.7)",  label: "Running",     bdr: "rgba(255,255,255,0.15)",  bg: "rgba(255,255,255,0.06)" },
+    success: { dot: "#34d399",              text: "#34d399",                label: "Confirmed",   bdr: "rgba(52,211,153,0.2)",    bg: "rgba(52,211,153,0.06)"  },
+    warning: { dot: "#fbbf24",              text: "#fbbf24",                label: "Unconfirmed", bdr: "rgba(251,191,36,0.2)",   bg: "rgba(251,191,36,0.06)"  },
+    error:   { dot: "#f87171",              text: "#f87171",                label: "Error",       bdr: "rgba(248,113,113,0.2)",   bg: "rgba(248,113,113,0.06)" },
   };
   const pill = pillCfg[status];
 
@@ -493,7 +466,7 @@ export default function Home() {
           {/* Brand */}
           <div style={{ marginBottom: "2rem", display: "flex", alignItems: "center", gap: "0.625rem" }}>
             <div style={{ display: "flex", height: "2rem", width: "2rem", flexShrink: 0, alignItems: "center", justifyContent: "center", borderRadius: "0.625rem", backgroundColor: "white", color: "black", fontSize: "0.875rem", fontWeight: 900 }}>⚡</div>
-            <span style={{ fontSize: "0.9375rem", fontWeight: 700, letterSpacing: "-0.02em" }}>AutoFill Agent</span>
+            <span style={{ fontSize: "0.9375rem", fontWeight: 700, letterSpacing: "-0.02em" }}>AutoSlay</span>
           </div>
 
           {/* Nav */}
@@ -665,12 +638,11 @@ export default function Home() {
               {/* ── Missing fields panel (appears when URL is typed) ── */}
               {url && missingKeys.length > 0 && (
                 <div style={{ padding: "0.875rem 0 0" }}>
-                  <MissingFieldsPanel
-                    missingKeys={missingKeys}
+                  <AgentMissingFieldsPanel
+                    agentFields={missingKeys.map(key => ({ label: key, type: 'text', required: false }))}
                     tempValues={tempValues}
                     onChange={handleTempChange}
                     onNavigate={() => navigate("/form")}
-                    running={running}
                   />
                 </div>
               )}
@@ -690,7 +662,7 @@ export default function Home() {
 
               {/* ── Action buttons ── */}
               <div style={{ display: "flex", gap: "0.75rem", padding: "1rem 1.25rem", marginTop: "auto", flexShrink: 0 }}>
-                {(status === "success" || status === "error") && (
+                {(status === "success" || status === "warning" || status === "error") && (
                   <button onClick={handleReset} style={{ borderRadius: "0.6875rem", border: "1px solid rgba(255,255,255,0.1)", backgroundColor: "rgba(255,255,255,0.04)", padding: "0.75rem 1.25rem", fontSize: "0.8125rem", fontWeight: 600, color: "rgba(255,255,255,0.4)", cursor: "pointer", transition: "all 0.15s", fontFamily: S.font }}
                     onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.2)"; e.currentTarget.style.color = "white"; }}
                     onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)"; e.currentTarget.style.color = "rgba(255,255,255,0.4)"; }}

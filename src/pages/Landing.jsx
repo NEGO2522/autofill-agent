@@ -128,7 +128,7 @@ function Nav({ onCTA, user }) {
           alignItems:"center", justifyContent:"center",
           fontSize:"0.8125rem", fontWeight:900,
         }}>⚡</div>
-        <span style={{ fontSize:"0.9375rem", fontWeight:700, letterSpacing:"-0.02em", color:"white" }}>AutoFill Agent</span>
+        <span style={{ fontSize:"0.9375rem", fontWeight:700, letterSpacing:"-0.02em", color:"white" }}>AutoSlay</span>
       </div>
 
       {/* Links */}
@@ -186,7 +186,7 @@ function Nav({ onCTA, user }) {
 function DemoForm() {
   const [vals, setVals]       = useState(Object.fromEntries(DEMO_FIELDS.map(f=>[f.id,""])));
   const [active, setActive]   = useState({});
-  const [msg, setMsg]         = useState("AutoFill Agent is scanning this form");
+  const [msg, setMsg]         = useState("AutoSlay is scanning this form");
   const [done, setDone]       = useState(false);
   const stepRef               = useRef(0);
   const timerRef              = useRef(null);
@@ -204,7 +204,7 @@ function DemoForm() {
           setVals(Object.fromEntries(DEMO_FIELDS.map(f=>[f.id,""])));
           setActive({});
           setDone(false);
-          setMsg("AutoFill Agent is scanning this form");
+          setMsg("AutoSlay is scanning this form");
           stepRef.current = 0;
           timerRef.current = setTimeout(run, 1200);
         }, 2600);
@@ -530,7 +530,7 @@ export default function Landing() {
               fontSize:"clamp(0.9375rem,1.5vw,1.125rem)", lineHeight:1.75,
               color:"rgba(255,255,255,0.35)", maxWidth:480, marginBottom:"2.5rem",
             }}>
-              AutoFill Agent reads any web form and completes it instantly using your saved profile.
+              AutoSlay reads any web form and completes it instantly using your saved profile.
               One click. Every form.
             </p>
 
@@ -706,7 +706,7 @@ export default function Landing() {
             display:"flex", alignItems:"center", justifyContent:"center",
             fontSize:"0.75rem", fontWeight:900,
           }}>⚡</div>
-          <span style={{ fontSize:"0.875rem", fontWeight:700, color:"white", letterSpacing:"-0.02em" }}>AutoFill Agent</span>
+          <span style={{ fontSize:"0.875rem", fontWeight:700, color:"white", letterSpacing:"-0.02em" }}>AutoSlay</span>
         </div>
 
         <div style={{ display:"flex", gap:"1.5rem" }}>
@@ -716,7 +716,7 @@ export default function Landing() {
         </div>
 
         <div style={{ fontSize:"0.75rem", color:"rgba(255,255,255,0.15)" }}>
-          © 2026 AutoFill Agent · MIT License
+          © 2026 AutoSlay · MIT License
         </div>
       </footer>
     </div>

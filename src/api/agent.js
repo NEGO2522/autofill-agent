@@ -4,7 +4,7 @@
  * In dev:  /api/agent/run-stream  (Vite proxies → localhost:5000)
  * In prod: VITE_API_URL/api/agent/run-stream  (your Render backend URL)
  */
-export const runAgent = (url, profile, { onMessage, onDone, onError }) => {
+export const runAgent = (url, profile, { onMessage, onDone, onError, onNeedsInput }) => {
   const base = import.meta.env.VITE_API_URL || "";
 
   const params = new URLSearchParams();
@@ -37,6 +37,11 @@ export const runAgent = (url, profile, { onMessage, onDone, onError }) => {
   es.addEventListener("log", (e) => {
     try { onMessage?.(JSON.parse(e.data)); }
     catch { onMessage?.({ message: e.data }); }
+  });
+
+  es.addEventListener("needs_input", (e) => {
+    try { onNeedsInput?.(JSON.parse(e.data)); }
+    catch { onNeedsInput?.({ fields: [] }); }
   });
 
   es.addEventListener("done", (e) => {

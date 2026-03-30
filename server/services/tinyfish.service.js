@@ -49,36 +49,33 @@ ${url}
 
 ## INSTRUCTIONS
 1. Navigate to the URL and wait for the page to fully load.
-2. Identify ALL visible and interactive form fields on the page — inputs, textareas, dropdowns, radio buttons, checkboxes, date pickers, file uploads, sliders, etc.
-3. For EACH field, intelligently determine what data it needs by reading:
-   - The field label
-   - Placeholder text
-   - Surrounding context / section heading
-   - Field name / ID attribute
-4. Map the most appropriate value from the user profile above to each field.
-5. For fields not covered by the profile (e.g. "Why do you want to join?", "Describe your project"):
-   - Use the "Cover Letter / Bio" field if relevant
-   - Otherwise generate a sensible, professional response based on the user's profile context
-6. Handle special field types:
-   - Dropdowns: select the best matching option
-   - Radio buttons: select the most appropriate option
-   - Checkboxes: check relevant ones (e.g. terms & conditions, skills, interests)
-   - Date fields: use the correct format for that field
-   - File uploads: skip unless a file path is provided
-   - Multi-step forms: complete each step before proceeding to the next
-   - CAPTCHA: solve if possible, otherwise note it
-7. After filling ALL fields:
-   - Scroll to check for any missed fields
-   - Accept terms/privacy policy checkboxes if present
-   - Click the Submit / Apply / Register / Send / Next button
-   - Wait for a success/confirmation message
-8. Report each action as you take it.
+2. Scan ALL visible form fields on the page — inputs, textareas, dropdowns, radio buttons, checkboxes, date pickers, file uploads, etc.
+3. For each field, check if the User Profile above has a value that fits.
+   - Map profile data to fields intelligently based on the label, placeholder, and context.
+   - For dropdowns / radio buttons: pick the best matching option.
+   - For checkboxes: check relevant ones (terms & conditions, consent, skills, etc.).
+   - For date fields: use the correct format for that field.
+   - For file uploads: skip unless a file path is provided.
+4. BEFORE filling anything, identify which fields on the actual page are REQUIRED (marked with *, "required", or similar) AND have no matching value in the User Profile above.
+   - If any such fields exist, output a JSON block on its own line in this EXACT format and nothing else on that line:
+     NEEDS_INPUT:{"fields":[{"label":"<exact field label from the page>","type":"<text|email|tel|textarea|select>","required":true}]}
+   - Only include fields that are truly on the page AND have no match in the profile.
+   - Do NOT include fields you can already fill from the profile.
+   - Do NOT guess fields based on the URL or website name — only report fields you can actually see on the page.
+   - After emitting NEEDS_INPUT, continue filling all the fields you DO have data for. Do not wait.
+5. For optional fields not in the profile (e.g. "Message", "Tell us more"):
+   - Use the bio/cover letter field if relevant, or generate a short professional response.
+6. After filling ALL fields:
+   - Scroll to check for any missed fields.
+   - Accept terms/privacy policy checkboxes if present.
+   - Click the Submit / Apply / Register / Send / Next button.
+   - Wait for a success/confirmation message.
+7. Report each action as you take it.
 
 ## IMPORTANT
-- Do NOT skip any field — fill everything you can
-- If a required field has no matching profile data, make a reasonable professional inference
-- This could be any type of form: job application, hackathon registration, government portal, contact form, event signup, college application, visa form, insurance, etc.
-- Adapt your strategy to the specific form you encounter
+- Only ask for missing fields that ACTUALLY exist on this specific page — not guesses based on the URL or company type.
+- If a required field is missing from the profile, emit NEEDS_INPUT once, then continue filling what you can.
+- This could be any type of form. Adapt to what you actually see on the page.
 `.trim();
 }
 
@@ -122,11 +119,39 @@ export const streamAgent = async (url, profile, res) => {
         const raw = trimmed.replace(/^data:\s*/, "");
         if (raw === "[DONE]") continue;
 
+        // Check for NEEDS_INPUT signal from the agent (a plain-text line, not JSON)
+        if (raw.startsWith("NEEDS_INPUT:")) {
+          try {
+            const payload = JSON.parse(raw.slice("NEEDS_INPUT:".length));
+            if (payload.fields && payload.fields.length > 0) {
+              send("needs_input", { fields: payload.fields });
+            }
+          } catch { /* malformed, ignore */ }
+          continue;
+        }
+
         try {
           const evt = JSON.parse(raw);
+
+          // Also check if the agent embedded NEEDS_INPUT inside a message string
+          const msgText = typeof evt.message === "string" ? evt.message : "";
+          const niMatch = msgText.match(/NEEDS_INPUT:(\{.*\})/);
+          if (niMatch) {
+            try {
+              const payload = JSON.parse(niMatch[1]);
+              if (payload.fields && payload.fields.length > 0) {
+                send("needs_input", { fields: payload.fields });
+              }
+            } catch { /* malformed, ignore */ }
+          }
+
           send("message", evt);
 
-          const isDone =
+          // Only treat structural completion events as "done" —
+          // NOT log messages that happen to contain keywords like "success".
+          // This prevents premature done firing when the agent merely
+          // narrates an action (e.g. "Clicking the submit button").
+          const isStructuralDone =
             evt.type === "result" ||
             evt.type === "done" ||
             evt.type === "complete" ||
@@ -136,12 +161,29 @@ export const streamAgent = async (url, profile, res) => {
             evt.status === "done" ||
             evt.status === "finished" ||
             evt.finished === true ||
-            evt.done === true ||
-            (typeof evt.message === "string" &&
-              /(success|submitted|done|complet|registered|applied|thank)/i.test(evt.message));
+            evt.done === true;
 
-          if (isDone) {
-            send("done", { success: true, message: "Form submitted successfully!" });
+          // For message/log events, look for the agent confirming a
+          // post-submission page (thank-you, confirmation, success screen).
+          // Require at least TWO strong signals to avoid false positives.
+          const msg = typeof evt.message === "string" ? evt.message.toLowerCase() : "";
+          const confirmSignals = [
+            /thank.{0,10}(you|registr|submiss|appl)/i,
+            /successfull?y\s+(submitted|registered|applied|sent)/i,
+            /your (application|registration|submission|form) (has been|was) (submitted|received|sent)/i,
+            /confirmation (number|id|code)/i,
+            /you.{0,20}(registered|applied|signed up)/i,
+          ];
+          const confirmedByMessage = confirmSignals.some(r => r.test(msg));
+
+          if (isStructuralDone || confirmedByMessage) {
+            send("done", {
+              success: true,
+              confirmed: isStructuralDone || confirmedByMessage,
+              message: confirmedByMessage
+                ? "Form submitted — confirmation detected on page!"
+                : "Agent finished. Check the browser to confirm submission.",
+            });
             res.end();
             return;
           }
