@@ -146,6 +146,13 @@ function Nav({ onCTA, user }) {
             </a>
           );
         })}
+        <a 
+          href="/contact" 
+          className="nav-link"
+          style={{ color: "rgba(255,255,255,0.4)", fontWeight: 600 }}
+        >
+          Contact
+        </a>
       </div>
 
       {/* CTA - Show different content based on auth state */}
