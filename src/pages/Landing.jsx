@@ -78,7 +78,7 @@ const FEATURES = [
 
 const PLANS = [
   { name:"Free",       price:"$0",   period:"/mo", desc:"Perfect to get started",  featured:false,
-    items:["500 form fills / month","Chrome extension","Basic field mapping","Community support"]               },
+    items:["500 form fills / month","Basic field mapping","Community support"]               },
   { name:"Pro",        price:"$29",  period:"/mo", desc:"For teams moving fast",   featured:true,
     items:["10,000 fills / month","API access + Webhooks","CAPTCHA handling","Multi-step forms","Priority support"] },
   { name:"Enterprise", price:"Custom",period:"",   desc:"Built for scale",         featured:false,
