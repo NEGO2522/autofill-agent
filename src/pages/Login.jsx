@@ -26,7 +26,7 @@ export default function Login() {
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged((user) => {
       if (user) {
-        navigate("/home");
+        navigate("/form");
       }
     });
     return unsubscribe;
@@ -40,7 +40,7 @@ export default function Login() {
     try {
       if (mode === "login") await signInWithEmailAndPassword(auth, email, password);
       else await createUserWithEmailAndPassword(auth, email, password);
-      navigate("/home");
+      navigate("/form");
     } catch (err) {
       const raw = err.code?.replace("auth/", "").replace(/-/g, " ") || "Something went wrong";
       setError(raw.charAt(0).toUpperCase() + raw.slice(1) + ".");
@@ -51,7 +51,7 @@ export default function Login() {
     clearErr(); setGLoading(true);
     try {
       await signInWithPopup(auth, googleProvider);
-      navigate("/home");
+      navigate("/form");
     } catch (err) {
       const raw = err.code?.replace("auth/", "").replace(/-/g, " ") || "Google sign-in failed";
       setError(raw.charAt(0).toUpperCase() + raw.slice(1) + ".");
