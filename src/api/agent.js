@@ -4,28 +4,45 @@
  * In dev:  /api/agent/run-stream  (Vite proxies → localhost:5000)
  * In prod: VITE_API_URL/api/agent/run-stream  (your Render backend URL)
  */
-export const runAgent = (url, profile, { onMessage, onDone, onError, onNeedsInput }) => {
+export const runAgent = (url, profile, { onMessage, onDone, onError, onNeedsInput }, extraFields = {}) => {
   const base = import.meta.env.VITE_API_URL || "";
 
   const params = new URLSearchParams();
+  params.set("url", url);
 
-  // Add every profile field that has a value
+  // All profile fields
   const fields = [
-    "url","name","firstName","lastName","email","phone",
-    "dob","gender",
-    "address1","address2","city","state","pincode","country","nationality",
-    "organization","jobTitle","experience","linkedin","github","website","skills",
-    "qualification","fieldOfStudy","university","graduationYear",
-    "teamName","teamSize","projectName","projectDescription",
-    "bio","message","formContext",
+    // Identity
+    "name", "firstName", "lastName", "email", "phone", "dob", "gender",
+    // Address
+    "address1", "address2", "city", "state", "pincode", "country", "nationality",
+    // Education
+    "qualification", "fieldOfStudy", "university", "graduationYear",
+    "cgpa", "tenthPercent", "twelfthPercent",
+    // Professional / Job
+    "organization", "jobTitle", "experience", "industry", "skills",
+    "ctc", "expectedCtc", "noticePeriod", "certifications",
+    // Social
+    "linkedin", "github", "portfolio", "twitter", "leetcode", "instagram",
+    // Hackathon / Event
+    "teamName", "teamSize", "teamRole", "projectName", "projectDescription",
+    "techStack", "githubRepo", "demoLink", "achievements",
+    // Documents
+    "resumeURL", "collegePhotoURL",
+    // Bio & extra
+    "bio", "whyUs", "strengths", "hobbies", "message", "formContext",
   ];
 
-  params.set("url", url);
   fields.forEach(key => {
-    if (key !== "url" && profile[key] !== undefined && profile[key] !== "") {
+    if (profile[key] !== undefined && profile[key] !== "") {
       params.set(key, profile[key]);
     }
   });
+
+  // Inject any mid-run extra fields from the UI
+  if (extraFields && Object.keys(extraFields).length > 0) {
+    params.set("extraFields", JSON.stringify(extraFields));
+  }
 
   const es = new EventSource(`${base}/api/agent/run-stream?${params.toString()}`);
 

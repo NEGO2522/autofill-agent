@@ -4,7 +4,7 @@ import { signOut } from "firebase/auth";
 import { doc, setDoc, getDoc, collection, addDoc, query, orderBy, onSnapshot, getDocs, deleteDoc } from "firebase/firestore";
 import { auth, db } from "../firebase/firebase";
 import { runAgent } from "../api/agent";
-import { EMPTY_PROFILE, SECTIONS } from "./Form";
+import { EMPTY_PROFILE } from "./Form";
 
 /* ══════════════════════════════════════════════════════
    STEP TRACKER
@@ -271,7 +271,8 @@ export default function Home() {
   // agent-reported missing fields (populated mid-run from NEEDS_INPUT events)
   const [agentFields,  setAgentFields]  = useState([]); // [{ label, type, required }]
   const [tempValues,   setTempValues]   = useState({});  // label → user-typed value
-  const [missingKeys,  setMissingKeys]  = useState([]);  // missing fields detected from URL
+  const [missingKeys,  setMissingKeys]  = useState([]);  // pre-run missing fields
+  const [platformName, setPlatformName] = useState("");  // detected platform label
 
   const esRef   = useRef(null);
   const stepRef = useRef(0);
@@ -344,12 +345,29 @@ export default function Home() {
     })();
   }, [user, navigate]);
 
-  /* ── detect missing fields whenever URL changes ── */
+  /* ── detect platform + pre-run missing fields whenever URL changes ── */
   useEffect(() => {
-    if (!url || !profileLoaded) { setMissingKeys([]); return; }
+    if (!url || !profileLoaded) { setMissingKeys([]); setPlatformName(""); return; }
+    const u = url.toLowerCase();
+    const platforms = [
+      ["unstop.com", "Unstop"],
+      ["devfolio.co", "Devfolio"],
+      ["devpost.com", "Devpost"],
+      ["docs.google.com/forms", "Google Forms"],
+      ["forms.gle", "Google Forms"],
+      ["linkedin.com/jobs", "LinkedIn"],
+      ["linkedin.com/apply", "LinkedIn Easy Apply"],
+      ["greenhouse.io", "Greenhouse ATS"],
+      ["lever.co", "Lever ATS"],
+      ["workday", "Workday ATS"],
+      ["internshala.com", "Internshala"],
+      ["hackerearth.com", "HackerEarth"],
+      ["hackerrank.com", "HackerRank"],
+    ];
+    const matched = platforms.find(([key]) => u.includes(key));
+    setPlatformName(matched ? matched[1] : "");
     const missing = [];
     setMissingKeys(missing);
-    // carry over any already-typed temp values for new keys
     setTempValues(prev => {
       const next = {};
       missing.forEach(k => { next[k] = prev[k] || ""; });
@@ -385,6 +403,21 @@ export default function Home() {
     let   runLogs  = [];
 
     const { close } = runAgent(runUrl, runProfile, {
+      onNeedsInput(data) {
+        if (data?.fields && data.fields.length > 0) {
+          setAgentFields(prev => {
+            // merge new fields with existing, avoid duplicates by label
+            const existingLabels = new Set(prev.map(f => f.label));
+            const newFields = data.fields.filter(f => !existingLabels.has(f.label));
+            return [...prev, ...newFields];
+          });
+          setTempValues(prev => {
+            const next = { ...prev };
+            data.fields.forEach(f => { if (!next[f.label]) next[f.label] = ""; });
+            return next;
+          });
+        }
+      },
       onMessage(evt) {
         const text = evt.message || evt.log || evt.output || JSON.stringify(evt);
         runLogs = [...runLogs.slice(-49), text];
@@ -423,7 +456,8 @@ export default function Home() {
   const handleReset = () => {
     esRef.current?.close();
     setStatus("idle"); setStep(0); stepRef.current = 0;
-    setMsg(""); setLogs([]); setUrl(""); setTempValues({}); setMissingKeys([]);
+    setMsg(""); setLogs([]); setUrl(""); setTempValues({});
+    setMissingKeys([]); setAgentFields([]); setPlatformName("");
   };
 
   const handleRerun = (entry) => {
@@ -616,6 +650,12 @@ export default function Home() {
                 <p style={{ margin: "0.4rem 0 0", fontSize: "0.6875rem", color: "rgba(255,255,255,0.18)" }}>
                   Works on any web form: jobs, hackathons, scholarships, govt portals, events, college admissions…
                 </p>
+                {platformName && (
+                  <div style={{ marginTop: "0.5rem", display: "inline-flex", alignItems: "center", gap: "0.375rem", borderRadius: "9999px", border: "1px solid rgba(52,211,153,0.25)", backgroundColor: "rgba(52,211,153,0.06)", padding: "0.2rem 0.75rem" }}>
+                    <span style={{ width: 6, height: 6, borderRadius: "50%", backgroundColor: "#34d399", flexShrink: 0 }} />
+                    <span style={{ fontSize: "0.625rem", fontWeight: 700, color: "rgba(52,211,153,0.8)", textTransform: "uppercase", letterSpacing: "0.1em" }}>Platform detected: {platformName}</span>
+                  </div>
+                )}
               </div>
 
               {/* ── Profile loaded indicator ── */}
@@ -638,8 +678,20 @@ export default function Home() {
                 </div>
               )}
 
-              {/* ── Missing fields panel (appears when URL is typed) ── */}
-              {url && missingKeys.length > 0 && (
+              {/* ── Agent NEEDS_INPUT panel — shown mid-run when agent finds unfilled required fields ── */}
+              {agentFields.length > 0 && (
+                <div style={{ padding: "0.875rem 0 0" }}>
+                  <AgentMissingFieldsPanel
+                    agentFields={agentFields}
+                    tempValues={tempValues}
+                    onChange={handleTempChange}
+                    onNavigate={() => navigate("/form")}
+                  />
+                </div>
+              )}
+
+              {/* ── Pre-run missing fields (static) ── */}
+              {url && missingKeys.length > 0 && !agentFields.length && (
                 <div style={{ padding: "0.875rem 0 0" }}>
                   <AgentMissingFieldsPanel
                     agentFields={missingKeys.map(key => ({ label: key, type: 'text', required: false }))}
@@ -651,7 +703,7 @@ export default function Home() {
               )}
 
               {/* ── No missing fields confirmation ── */}
-              {url && missingKeys.length === 0 && profileLoaded && filledCount > 0 && (
+              {url && missingKeys.length === 0 && !agentFields.length && profileLoaded && filledCount > 0 && (
                 <div style={{ margin: "0.875rem 1.25rem 0", borderRadius: "0.75rem", border: "1px solid rgba(52,211,153,0.15)", backgroundColor: "rgba(52,211,153,0.04)", padding: "0.75rem 1rem", display: "flex", alignItems: "center", gap: "0.625rem" }}>
                   <span>✅</span>
                   <p style={{ margin: 0, fontSize: "0.75rem", color: "rgba(52,211,153,0.8)", fontWeight: 500 }}>Profile looks complete for this URL — ready to launch!</p>
