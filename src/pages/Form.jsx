@@ -363,7 +363,11 @@ export default function Form() {
       });
 
       setSaved(true);
-      setTimeout(() => setSaved(false), 3000);
+      setTimeout(() => {
+        setSaved(false);
+        // Redirect to Home.jsx after successful save
+        navigate("/home");
+      }, 2000);
     } catch (e) {
       setSaveErr("Failed to save: " + e.message);
     } finally {
