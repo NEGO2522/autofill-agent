@@ -221,7 +221,7 @@ export default function Home() {
                   lineHeight: 1.75,
                   maxWidth: 360,
                 }}>
-                  Fill hackathon forms in one click. Save your details once — AutoSlay handles the rest automatically.
+                  Fill any form in one click — job applications, hackathons, events, registrations, and more. Save your details once, AutoSlay handles the rest.
                 </p>
               </div>
 
@@ -231,9 +231,9 @@ export default function Home() {
               {/* How it works steps */}
               <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
                 {[
-                  { n: "01", title: "Save your profile details",    desc: "Name, college, resume, skills — once." },
+                  { n: "01", title: "Save your profile details",    desc: "Name, email, resume, skills — once and done." },
                   { n: "02", title: "Enable extension on browser",  desc: "Download & enable AutoSlay on Chrome." },
-                  { n: "03", title: "Open any form → one-click fill", desc: "AutoSlay fills everything instantly." },
+                  { n: "03", title: "Open any form → one-click fill", desc: "Jobs, events, hackathons — AutoSlay fills it all." },
                 ].map(({ n, title, desc }) => (
                   <div key={n} style={{ display: "flex", gap: "1rem", alignItems: "flex-start" }}>
                     <div style={{
@@ -252,18 +252,7 @@ export default function Home() {
                 ))}
               </div>
 
-              {/* Social proof strip */}
-              <div style={{
-                display: "flex", alignItems: "center", gap: "1.25rem", flexWrap: "wrap",
-                fontSize: "0.75rem", color: "rgba(255,255,255,0.2)",
-                paddingTop: "0.5rem",
-              }}>
-                <span>3,000+ teams</span>
-                <span style={{ opacity: .3 }}>·</span>
-                <span>4M+ forms filled</span>
-                <span style={{ opacity: .3 }}>·</span>
-                <span>MIT licensed</span>
-              </div>
+
             </div>
 
             {/* ── RIGHT — Two action cards ── */}
@@ -318,7 +307,7 @@ export default function Home() {
                     color: S.muted, lineHeight: 1.7,
                     maxWidth: 260,
                   }}>
-                    Name, college, resume, skills — save once, autofill everywhere.
+                    Name, email, resume, skills — save once, autofill on any form anywhere.
                   </p>
                 </div>
 
@@ -386,7 +375,7 @@ export default function Home() {
                     color: S.muted, lineHeight: 1.7,
                     maxWidth: 260,
                   }}>
-                    Download AutoSlay for Chrome and enable it in your browser to start autofilling.
+                    Download AutoSlay for Chrome and start autofilling job applications, events, hackathons, and more.
                   </p>
                 </div>
 
