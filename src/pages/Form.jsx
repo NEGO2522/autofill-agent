@@ -1,12 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { doc, setDoc, getDoc } from "firebase/firestore";
-import {
-  ref,
-  uploadBytesResumable,
-  getDownloadURL,
-} from "firebase/storage";
-import { auth, db, storage } from "../firebase/firebase";
+import { auth, db } from "../firebase/firebase";
 import { signOut } from "firebase/auth";
 
 /* ══════════════════════════════════════════════════════
@@ -22,70 +17,31 @@ const T = {
 };
 
 /* ══════════════════════════════════════════════════════
-   FORM SECTIONS  (hackathon / job focused)
+   CLOUDINARY CONFIG
+══════════════════════════════════════════════════════ */
+const CLOUDINARY_CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
+const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
+
+/* ══════════════════════════════════════════════════════
+   FORM SECTIONS  (hackathon focused)
 ══════════════════════════════════════════════════════ */
 export const SECTIONS = [
   {
-    id: "personal",
-    label: "Personal Info",
+    id: "profile",
+    label: "Complete Profile",
     icon: "👤",
-    desc: "Basic identity details",
+    desc: "Personal, academic, and document information",
     fields: [
-      { key: "firstName", label: "First Name",     placeholder: "Arjun",               required: false },
-      { key: "lastName",  label: "Last Name",       placeholder: "Sharma",              required: false },
-      { key: "email",     label: "Email Address",   placeholder: "arjun@gmail.com",     required: false, type: "email" },
-      { key: "phone",     label: "Contact Number",  placeholder: "+91 98765 43210",      required: false },
+      { key: "firstName", label: "First Name",     placeholder: "Arjun",               required: true },
+      { key: "lastName",  label: "Last Name",       placeholder: "Sharma",              required: true },
+      { key: "email",     label: "Email Address",   placeholder: "arjun@gmail.com",     required: true, type: "email" },
+      { key: "phone",     label: "Contact Number",  placeholder: "+91 98765 43210",      required: true },
+      { key: "collegeName",  label: "College / University Name", placeholder: "JECRC University",   required: true, span: 2 },
+      { key: "degreeName",    label: "Degree / Program",    placeholder: "B.Tech Computer Science",        required: true },
+      { key: "year",          label: "Current Year",           placeholder: "3rd Year",                           required: true },
+      { key: "expectedGraduationYear", label: "Expected Graduation Year", placeholder: "2025", required: true },
+      { key: "rollNumber",    label: "Roll Number / Student ID", placeholder: "21EJCCS001",                     required: false },
     ],
-  },
-  {
-    id: "team",
-    label: "Team Details",
-    icon: "🏆",
-    desc: "Hackathon / event team information",
-    fields: [
-      { key: "teamName",    label: "Team Name",     placeholder: "Team Nexus",          required: false },
-      { key: "teamSize",    label: "Team Size",     placeholder: "4",                   required: false },
-      { key: "teamRole",    label: "Your Role",     placeholder: "Team Lead / Backend", required: false },
-      { key: "projectName", label: "Project / Idea Name", placeholder: "EcoTrack",     required: false },
-      { key: "techStack", label: "Tech Stack", placeholder: "React, Firebase, Node.js", required: false, span: 2 },
-    ],
-  },
-  {
-    id: "job",
-    label: "Job Details",
-    icon: "💼",
-    desc: "Professional & career related fields",
-    fields: [
-      { key: "organization",  label: "Current Company / College", placeholder: "JECRC / Infosys",   required: false, span: 2 },
-      { key: "jobTitle",      label: "Current Role / Designation", placeholder: "Software Engineer", required: false },
-      { key: "experience",    label: "Years of Experience",        placeholder: "2",                 required: false },
-      { key: "skills",  label: "Skills",         placeholder: "React, Node.js, Python",             required: false, span: 2 },
-      { key: "degreeName",    label: "Degree Name",    placeholder: "B.Tech Computer Science",        required: false, span: 2 },
-      { key: "specialization", label: "Specialization", placeholder: "Artificial Intelligence",       required: false },
-      { key: "year",          label: "Year",           placeholder: "3rd",                           required: false },
-      { key: "expectedGraduationYear", label: "Expected Year of Graduation", placeholder: "2025", required: false },
-    ],
-  },
-  {
-    id: "social",
-    label: "Social Links",
-    icon: "🔗",
-    desc: "Online presence and portfolios",
-    fields: [
-      { key: "linkedin",  label: "LinkedIn URL",       placeholder: "linkedin.com/in/username",  required: false, type: "url" },
-      { key: "github",    label: "GitHub URL",         placeholder: "github.com/username",       required: false, type: "url" },
-      { key: "portfolio", label: "Portfolio / Website", placeholder: "yoursite.dev",             required: false, type: "url" },
-      { key: "twitter",   label: "Twitter / X",        placeholder: "@username",                 required: false },
-      { key: "leetcode",  label: "LeetCode / CF",      placeholder: "leetcode.com/username",     required: false, type: "url" },
-      { key: "instagram", label: "Instagram",          placeholder: "@username",                 required: false },
-    ],
-  },
-  {
-    id: "documents",
-    label: "Documents",
-    icon: "📎",
-    desc: "Upload your resume and college photo ID",
-    fields: [], // handled separately — file uploads
   },
 ];
 
@@ -160,9 +116,10 @@ function Textarea({ value, onChange, placeholder, rows = 3 }) {
 }
 
 /* ── File upload card ── */
-function FileUpload({ label, required, accept, file, url, progress, onFileChange, uploading }) {
+function FileUpload({ label, required, accept, file, url, progress, onFileChange, uploading, onViewFile }) {
   const inputRef = useRef();
   const hasFile = !!file || !!url;
+
   return (
     <div>
       <Label required={required}>{label}</Label>
@@ -193,10 +150,24 @@ function FileUpload({ label, required, accept, file, url, progress, onFileChange
         ) : url ? (
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem" }}>
             <span style={{ color: T.accent, fontSize: "1rem" }}>✅</span>
-            <a href={url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
-              style={{ fontSize: "0.75rem", color: T.accent, textDecoration: "underline" }}>
+            <button 
+              onClick={(e) => {
+                e.stopPropagation();
+                onViewFile();
+              }}
+              style={{ 
+                fontSize: "0.75rem", 
+                color: T.accent, 
+                textDecoration: "underline", 
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                padding: 0,
+                fontFamily: T.font,
+                fontWeight: 500
+              }}>
               View uploaded file
-            </a>
+            </button>
             <span style={{ fontSize: "0.6875rem", color: "rgba(255,255,255,0.25)" }}>· click to replace</span>
           </div>
         ) : file ? (
@@ -220,6 +191,46 @@ function FileUpload({ label, required, accept, file, url, progress, onFileChange
 }
 
 /* ══════════════════════════════════════════════════════
+   CLOUDINARY UPLOAD HELPER
+══════════════════════════════════════════════════════ */
+const uploadToCloudinary = async (file, setProgress) => {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+  formData.append('folder', 'autofill-agent');
+
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    
+    xhr.upload.addEventListener('progress', (e) => {
+      if (e.lengthComputable) {
+        const percentComplete = Math.round((e.loaded / e.total) * 100);
+        setProgress(percentComplete);
+      }
+    });
+
+    xhr.addEventListener('load', () => {
+      if (xhr.status === 200) {
+        const response = JSON.parse(xhr.responseText);
+        resolve({
+          url: response.secure_url,
+          publicId: response.public_id,
+        });
+      } else {
+        reject(new Error(`Upload failed with status ${xhr.status}`));
+      }
+    });
+
+    xhr.addEventListener('error', () => {
+      reject(new Error('Upload failed'));
+    });
+
+    xhr.open('POST', `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/auto/upload`);
+    xhr.send(formData);
+  });
+};
+
+/* ══════════════════════════════════════════════════════
    MAIN COMPONENT
 ══════════════════════════════════════════════════════ */
 export default function Form() {
@@ -227,7 +238,7 @@ export default function Form() {
   const user     = auth.currentUser;
 
   const [profile,   setProfile]   = useState({ ...EMPTY_PROFILE });
-  const [active,    setActive]    = useState("personal");
+  const [active,    setActive]    = useState("profile");
   const [saving,    setSaving]    = useState(false);
   const [saved,     setSaved]     = useState(false);
   const [loading,   setLoading]   = useState(true);
@@ -256,7 +267,9 @@ export default function Form() {
         if (snap.exists()) {
           const data = snap.data();
           setProfile(prev => ({ ...prev, ...data }));
-          if (data.resumeURL)  setResumeURL(data.resumeURL);
+          
+          // Load URLs from Firestore
+          if (data.resumeURL) setResumeURL(data.resumeURL);
           if (data.collegePhotoURL) setPhotoURL(data.collegePhotoURL);
         }
       } catch (e) { console.error("Load error:", e); }
@@ -273,62 +286,79 @@ export default function Form() {
     setSaved(false); setSaveErr("");
   };
 
-  /* ── upload helper ── */
-  const uploadFile = (file, path, setProgress, setUploading, setURL) => {
-    return new Promise((resolve, reject) => {
-      setUploading(true);
-      const storageRef = ref(storage, path);
-      const task = uploadBytesResumable(storageRef, file);
-      task.on("state_changed",
-        snap => setProgress(Math.round((snap.bytesTransferred / snap.totalBytes) * 100)),
-        err  => { setUploading(false); reject(err); },
-        async () => {
-          const url = await getDownloadURL(task.snapshot.ref);
-          setURL(url);
-          setUploading(false);
-          resolve(url);
-        }
-      );
-    });
+  /* ── View file handler ── */
+  const handleViewResumeFile = () => {
+    if (resumeURL) {
+      window.open(resumeURL, "_blank");
+    }
+  };
+
+  const handleViewPhotoFile = () => {
+    if (photoURL) {
+      window.open(photoURL, "_blank");
+    }
   };
 
   /* ── save ── */
   const handleSave = async () => {
     if (!user) return;
 
+    /* Check if Cloudinary is configured */
+    if (!CLOUDINARY_CLOUD_NAME || !CLOUDINARY_UPLOAD_PRESET) {
+      setSaveErr("⚠️ Cloudinary is not configured. Please add VITE_CLOUDINARY_CLOUD_NAME and VITE_CLOUDINARY_UPLOAD_PRESET to your .env file.");
+      return;
+    }
+
     /* resume is required */
     if (!resumeURL && !resumeFile) {
       setSaveErr("⚠️ Resume is required. Please upload your resume before saving.");
-      setActive("documents");
       return;
     }
 
     setSaving(true); setSaveErr("");
     try {
-      let finalResumeURL  = resumeURL;
-      let finalPhotoURL   = photoURL;
+      let finalResumeURL = resumeURL;
+      let finalPhotoURL = photoURL;
 
-      if (resumeFile && !resumeURL) {
-        finalResumeURL = await uploadFile(
-          resumeFile,
-          `resumes/${user.uid}/${resumeFile.name}`,
-          setResumeProgress, setResumeUp, setResumeURL
-        );
-      }
-      if (photoFile && !photoURL) {
-        finalPhotoURL = await uploadFile(
-          photoFile,
-          `college-ids/${user.uid}/${photoFile.name}`,
-          setPhotoProgress, setPhotoUp, setPhotoURL
-        );
+      // Upload resume to Cloudinary if new file selected
+      if (resumeFile) {
+        setResumeUp(true);
+        try {
+          const result = await uploadToCloudinary(resumeFile, setResumeProgress);
+          finalResumeURL = result.url;
+          setResumeURL(result.url);
+        } catch (error) {
+          setSaveErr("Failed to upload resume: " + error.message);
+          setResumeUp(false);
+          setSaving(false);
+          return;
+        }
+        setResumeUp(false);
       }
 
+      // Upload photo to Cloudinary if new file selected
+      if (photoFile) {
+        setPhotoUp(true);
+        try {
+          const result = await uploadToCloudinary(photoFile, setPhotoProgress);
+          finalPhotoURL = result.url;
+          setPhotoURL(result.url);
+        } catch (error) {
+          setSaveErr("Failed to upload photo: " + error.message);
+          setPhotoUp(false);
+          setSaving(false);
+          return;
+        }
+        setPhotoUp(false);
+      }
+
+      // Save to Firestore
       await setDoc(doc(db, "profiles", user.uid), {
         ...profile,
-        resumeURL:      finalResumeURL  || "",
-        collegePhotoURL: finalPhotoURL  || "",
+        resumeURL: finalResumeURL || "",
+        collegePhotoURL: finalPhotoURL || "",
         updatedAt: new Date().toISOString(),
-        uid:   user.uid,
+        uid: user.uid,
         email: user.email,
       });
 
@@ -403,14 +433,6 @@ export default function Form() {
 
           <div style={{ flex: 1 }} />
 
-          {/* Go to Agent */}
-          <button onClick={() => navigate("/home")}
-            style={{ display: "flex", alignItems: "center", gap: "0.75rem", width: "100%", borderRadius: "0.75rem", border: "1px solid rgba(255,255,255,0.08)", backgroundColor: "rgba(255,255,255,0.04)", padding: "0.75rem", cursor: "pointer", marginBottom: "0.5rem", background: "none" }}
-          >
-            <span style={{ fontSize: "1rem" }}>🤖</span>
-            <span style={{ fontSize: "0.8125rem", fontWeight: 600, color: "rgba(255,255,255,0.5)" }}>Go to Agent</span>
-          </button>
-
           {/* User */}
           <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", borderRadius: "0.75rem", border: `1px solid ${T.border}`, backgroundColor: "rgba(255,255,255,0.03)", padding: "0.75rem" }}>
             <div style={{ display: "flex", height: "2rem", width: "2rem", flexShrink: 0, alignItems: "center", justifyContent: "center", borderRadius: "9999px", border: "1px solid rgba(255,255,255,0.1)", backgroundColor: "rgba(255,255,255,0.1)", fontSize: "0.875rem" }}>
@@ -476,111 +498,77 @@ export default function Form() {
           </div>
         )}
 
-        {/* Section tabs */}
-        <div style={{ display: "flex", flexShrink: 0, gap: "0.25rem", padding: "0.625rem 1.25rem", borderBottom: `1px solid ${T.border}`, overflowX: "auto" }}>
-          {SECTIONS.map(sec => {
-            const isActive = active === sec.id;
-            return (
-              <button key={sec.id} onClick={() => setActive(sec.id)} style={{
-                flexShrink: 0, display: "flex", alignItems: "center", gap: "0.3rem",
-                borderRadius: "0.5rem", padding: "0.375rem 0.625rem",
-                border: isActive ? "1px solid rgba(255,255,255,0.18)" : "1px solid rgba(255,255,255,0.06)",
-                backgroundColor: isActive ? "rgba(255,255,255,0.09)" : "rgba(255,255,255,0.02)",
-                fontSize: "0.625rem", fontWeight: 600,
-                color: isActive ? "white" : "rgba(255,255,255,0.3)",
-                cursor: "pointer", fontFamily: T.font, transition: "all 0.15s",
-              }}>
-                <span style={{ fontSize: "0.75rem" }}>{sec.icon}</span>
-                <span>{sec.label}</span>
-              </button>
-            );
-          })}
-        </div>
-
+        
         {/* Fields */}
         <div ref={contentRef} style={{ flex: 1, overflowY: "auto", padding: "1.25rem" }}>
           <div style={{ maxWidth: "820px", margin: "0 auto" }}>
 
             {/* Regular field sections */}
-            {active !== "documents" && (
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", alignContent: "start" }} className="fields-grid">
-                {currentSection?.fields.map(field => (
-                  <div key={field.key} style={{ gridColumn: field.span === 2 ? "1 / -1" : "auto" }}>
-                    <Label required={field.required}>{field.label}</Label>
-                    {field.select ? (
-                      <Select value={profile[field.key]} onChange={set(field.key)} options={field.select} placeholder={field.placeholder} />
-                    ) : field.textarea ? (
-                      <Textarea value={profile[field.key]} onChange={set(field.key)} placeholder={field.placeholder} rows={field.rows || 3} />
-                    ) : (
-                      <Input type={field.type || "text"} value={profile[field.key]} onChange={set(field.key)} placeholder={field.placeholder} />
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", alignContent: "start" }} className="fields-grid">
+              {currentSection?.fields.map(field => (
+                <div key={field.key} style={{ gridColumn: field.span === 2 ? "1 / -1" : "auto" }}>
+                  <Label required={field.required}>{field.label}</Label>
+                  {field.select ? (
+                    <Select value={profile[field.key]} onChange={set(field.key)} options={field.select} placeholder={field.placeholder} />
+                  ) : field.textarea ? (
+                    <Textarea value={profile[field.key]} onChange={set(field.key)} placeholder={field.placeholder} rows={field.rows || 3} />
+                  ) : (
+                    <Input type={field.type || "text"} value={profile[field.key]} onChange={set(field.key)} placeholder={field.placeholder} />
+                  )}
+                </div>
+              ))}
+            </div>
 
             {/* Documents section */}
-            {active === "documents" && (
-              <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem", marginTop: "2rem" }}>
 
-                {/* Info banner */}
-                <div style={{ borderRadius: "0.75rem", border: "1px solid rgba(52,211,153,0.15)", backgroundColor: "rgba(52,211,153,0.04)", padding: "0.875rem 1rem" }}>
-                  <p style={{ margin: 0, fontSize: "0.8125rem", color: "rgba(52,211,153,0.8)", fontWeight: 500 }}>
-                    📎 Resume is <strong>required</strong>. College Photo ID is optional.
-                  </p>
-                </div>
-
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.25rem" }} className="fields-grid">
-                  {/* Resume */}
-                  <FileUpload
-                    label="Resume / CV"
-                    required={true}
-                    accept="application/pdf"
-                    file={resumeFile}
-                    url={resumeURL}
-                    progress={resumeProgress}
-                    uploading={resumeUploading}
-                    onFileChange={f => { setResumeFile(f); setResumeURL(""); setSaveErr(""); }}
-                  />
-
-                  {/* College Photo ID */}
-                  <FileUpload
-                    label="College Photo ID"
-                    required={false}
-                    accept="image/jpeg,image/png,application/pdf"
-                    file={photoFile}
-                    url={photoURL}
-                    progress={photoProgress}
-                    uploading={photoUploading}
-                    onFileChange={f => { setPhotoFile(f); setPhotoURL(""); }}
-                  />
-                </div>
-
-                <p style={{ margin: 0, fontSize: "0.6875rem", color: "rgba(255,255,255,0.2)", textAlign: "center" }}>
-                  Files are securely stored and only accessible to you.
+              {/* Info banner */}
+              <div style={{ borderRadius: "0.75rem", border: "1px solid rgba(52,211,153,0.15)", backgroundColor: "rgba(52,211,153,0.04)", padding: "0.875rem 1rem" }}>
+                <p style={{ margin: 0, fontSize: "0.8125rem", color: "rgba(52,211,153,0.8)", fontWeight: 500 }}>
+                  📎 Resume is <strong>required</strong>. College Photo ID is optional. Files uploaded to Cloudinary.
                 </p>
               </div>
-            )}
 
-            {/* Prev / Next */}
-            <div style={{ display: "flex", justifyContent: "space-between", marginTop: "1.75rem", gap: "0.75rem" }}>
-              <button
-                onClick={() => currentIdx > 0 && setActive(SECTIONS[currentIdx - 1].id)}
-                disabled={currentIdx === 0}
-                style={{ borderRadius: "0.625rem", border: "1px solid rgba(255,255,255,0.08)", backgroundColor: "rgba(255,255,255,0.03)", padding: "0.625rem 1.25rem", fontSize: "0.8125rem", fontWeight: 600, color: currentIdx === 0 ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.4)", cursor: currentIdx === 0 ? "default" : "pointer", fontFamily: T.font }}
-              >← Previous</button>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.25rem" }} className="fields-grid">
+                {/* Resume */}
+                <FileUpload
+                  label="Resume / CV"
+                  required={true}
+                  accept="application/pdf"
+                  file={resumeFile}
+                  url={resumeURL}
+                  progress={resumeProgress}
+                  uploading={resumeUploading}
+                  onFileChange={f => { setResumeFile(f); setResumeURL(""); setSaveErr(""); }}
+                  onViewFile={handleViewResumeFile}
+                />
 
-              {currentIdx < SECTIONS.length - 1 ? (
-                <button onClick={() => setActive(SECTIONS[currentIdx + 1].id)}
-                  style={{ borderRadius: "0.625rem", border: "none", backgroundColor: "white", padding: "0.625rem 1.5rem", fontSize: "0.8125rem", fontWeight: 700, color: "black", cursor: "pointer", fontFamily: T.font }}
-                >Next: {SECTIONS[currentIdx + 1].icon} {SECTIONS[currentIdx + 1].label} →</button>
-              ) : (
-                <button onClick={handleSave} disabled={saving}
-                  style={{ borderRadius: "0.625rem", border: saved ? `1px solid rgba(52,211,153,0.2)` : "none", backgroundColor: saved ? "rgba(52,211,153,0.12)" : "white", padding: "0.625rem 1.5rem", fontSize: "0.8125rem", fontWeight: 700, color: saved ? T.accent : "black", cursor: saving ? "not-allowed" : "pointer", fontFamily: T.font }}
-                >
-                  {saving ? "Saving…" : saved ? "✅ Saved!" : "💾 Save & Finish"}
-                </button>
-              )}
+                {/* College Photo ID */}
+                <FileUpload
+                  label="College Photo ID"
+                  required={false}
+                  accept="image/jpeg,image/png,application/pdf"
+                  file={photoFile}
+                  url={photoURL}
+                  progress={photoProgress}
+                  uploading={photoUploading}
+                  onFileChange={f => { setPhotoFile(f); setPhotoURL(""); }}
+                  onViewFile={handleViewPhotoFile}
+                />
+              </div>
+
+              <p style={{ margin: 0, fontSize: "0.6875rem", color: "rgba(255,255,255,0.2)", textAlign: "center" }}>
+                Files are securely stored on Cloudinary and accessible only via the URL.
+              </p>
+            </div>
+
+            {/* Save button */}
+            <div style={{ display: "flex", justifyContent: "center", marginTop: "1.75rem" }}>
+              <button onClick={handleSave} disabled={saving}
+                style={{ borderRadius: "0.625rem", border: saved ? `1px solid rgba(52,211,153,0.2)` : "none", backgroundColor: saved ? "rgba(52,211,153,0.12)" : "white", padding: "0.75rem 2rem", fontSize: "0.875rem", fontWeight: 700, color: saved ? T.accent : "black", cursor: saving ? "not-allowed" : "pointer", fontFamily: T.font }}
+              >
+                {saving ? "Saving…" : saved ? "✅ Saved!" : "💾 Save Profile"}
+              </button>
             </div>
           </div>
         </div>

@@ -269,10 +269,26 @@ export default function Home() {
   const [history,    setHistory]    = useState([]);
 
   // agent-reported missing fields (populated mid-run from NEEDS_INPUT events)
-  const [agentFields,  setAgentFields]  = useState([]); // [{ label, type, required }]
-  const [tempValues,   setTempValues]   = useState({});  // label → user-typed value
-  const [missingKeys,  setMissingKeys]  = useState([]);  // pre-run missing fields
-  const [platformName, setPlatformName] = useState("");  // detected platform label
+  const [agentFields,   setAgentFields]   = useState([]); // required fields agent couldn't fill
+  const [skippedFields, setSkippedFields] = useState([]); // ALL fields agent skipped (required + optional)
+  const [tempValues,    setTempValues]    = useState({});  // label → user-typed value
+  const [missingKeys,   setMissingKeys]   = useState([]);  // pre-run missing fields
+  const [platformName,  setPlatformName]  = useState("");  // detected platform label
+
+  // Session + Live browser stream
+  const [sessionId,     setSessionId]     = useState("");
+  const [streamingUrl,  setStreamingUrl]  = useState("");
+
+  // Credentials (collected before run)
+  const [sitePassword,  setSitePassword]  = useState("");      // password for the site
+  const [showPassword,  setShowPassword]  = useState(false);
+
+  // OTP state — two modes:
+  // 1. preOtp: user enters OTP BEFORE re-run (agent paused on OTP screen)
+  // 2. otpRequired: agent reported OTP screen mid-run (shown after run ends)
+  const [otpRequired,   setOtpRequired]   = useState(false);
+  const [otpValue,      setOtpValue]      = useState("");
+  const [otpHint,       setOtpHint]       = useState("");
 
   const esRef   = useRef(null);
   const stepRef = useRef(0);
@@ -336,6 +352,16 @@ export default function Home() {
         if (snap.exists()) {
           const data = snap.data();
           setProfile(prev => ({ ...prev, ...data }));
+          
+          // Check if user has completed the form (has resume)
+          if (!data.resumeURL) {
+            navigate("/form");
+            return;
+          }
+        } else {
+          // No profile exists, redirect to form
+          navigate("/form");
+          return;
         }
       } catch (e) {
         console.error("Profile load error:", e);
@@ -383,6 +409,7 @@ export default function Home() {
   const buildFinalProfile = () => {
     const merged = { ...profile };
     Object.entries(tempValues).forEach(([k, v]) => { if (v?.trim()) merged[k] = v.trim(); });
+    if (sitePassword?.trim()) merged.sitePassword = sitePassword.trim();
     return { ...merged, name: `${merged.firstName} ${merged.lastName}`.trim() };
   };
 
@@ -403,10 +430,21 @@ export default function Home() {
     let   runLogs  = [];
 
     const { close } = runAgent(runUrl, runProfile, {
+      onSession(data) {
+        if (data?.sessionId) setSessionId(data.sessionId);
+      },
+      onStreamingUrl(data) {
+        if (data?.url) setStreamingUrl(data.url);
+      },
+      onOtpRequired(data) {
+        setOtpRequired(true);
+        setOtpHint(data?.hint || data?.message || "OTP detected — please enter the code sent to you.");
+        setStatus("otp");
+        setMsg("⏳ OTP required — enter your verification code below and click Submit OTP.");
+      },
       onNeedsInput(data) {
         if (data?.fields && data.fields.length > 0) {
           setAgentFields(prev => {
-            // merge new fields with existing, avoid duplicates by label
             const existingLabels = new Set(prev.map(f => f.label));
             const newFields = data.fields.filter(f => !existingLabels.has(f.label));
             return [...prev, ...newFields];
@@ -416,6 +454,11 @@ export default function Home() {
             data.fields.forEach(f => { if (!next[f.label]) next[f.label] = ""; });
             return next;
           });
+        }
+      },
+      onSkippedFields(data) {
+        if (data?.fields) {
+          setSkippedFields(data.fields);
         }
       },
       onMessage(evt) {
@@ -428,11 +471,15 @@ export default function Home() {
       },
       onDone(data) {
         stepRef.current = 6; setStep(6);
-        const confirmed = data?.confirmed !== false; // true unless explicitly false
+        const confirmed = data?.confirmed === true;  // only true when agent explicitly confirms
+        const succeeded = data?.success === true;
         const doneMsg = data?.message || (confirmed
           ? "Form submitted — confirmation detected!"
-          : "Agent finished. Check the page to confirm submission.");
-        setStatus(confirmed ? "success" : "warning");
+          : succeeded
+          ? "Agent finished. Check the page to confirm submission."
+          : "Agent ended without confirmation. Please verify the form was submitted.");
+        const newStatus = confirmed ? "success" : "warning";
+        setStatus(newStatus);
         setMsg(doneMsg);
         saveHistoryEntry({
           id: runStart, timestamp: runStart,
@@ -453,11 +500,35 @@ export default function Home() {
     esRef.current = { close };
   };
 
+  const handleOtpSubmit = async () => {
+    if (!otpValue.trim() || !sessionId) return;
+    const base = import.meta.env.VITE_API_URL || "";
+    try {
+      const res = await fetch(`${base}/api/agent/submit-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId, otp: otpValue.trim() }),
+      });
+      if (res.ok) {
+        setOtpRequired(false);
+        setOtpValue("");
+        setStatus("running");
+        setMsg("✅ OTP submitted — agent is continuing...");
+      } else {
+        setMsg("❌ Failed to submit OTP. Please try again.");
+      }
+    } catch {
+      setMsg("❌ Could not reach server to submit OTP.");
+    }
+  };
+
   const handleReset = () => {
     esRef.current?.close();
     setStatus("idle"); setStep(0); stepRef.current = 0;
     setMsg(""); setLogs([]); setUrl(""); setTempValues({});
-    setMissingKeys([]); setAgentFields([]); setPlatformName("");
+    setMissingKeys([]); setAgentFields([]); setSkippedFields([]); setPlatformName("");
+    setOtpRequired(false); setOtpValue(""); setOtpHint("");
+    setStreamingUrl(""); setSessionId("");
   };
 
   const handleRerun = (entry) => {
@@ -478,6 +549,7 @@ export default function Home() {
   const pillCfg = {
     idle:    { dot: "rgba(255,255,255,0.2)", text: "rgba(255,255,255,0.3)",  label: "Ready",       bdr: "rgba(255,255,255,0.08)",  bg: "rgba(255,255,255,0.04)" },
     running: { dot: "white",                text: "rgba(255,255,255,0.7)",  label: "Running",     bdr: "rgba(255,255,255,0.15)",  bg: "rgba(255,255,255,0.06)" },
+    otp:     { dot: "#a78bfa",              text: "#a78bfa",                label: "OTP Needed",  bdr: "rgba(167,139,250,0.25)",  bg: "rgba(167,139,250,0.06)" },
     success: { dot: "#34d399",              text: "#34d399",                label: "Confirmed",   bdr: "rgba(52,211,153,0.2)",    bg: "rgba(52,211,153,0.06)"  },
     warning: { dot: "#fbbf24",              text: "#fbbf24",                label: "Unconfirmed", bdr: "rgba(251,191,36,0.2)",   bg: "rgba(251,191,36,0.06)"  },
     error:   { dot: "#f87171",              text: "#f87171",                label: "Error",       bdr: "rgba(248,113,113,0.2)",   bg: "rgba(248,113,113,0.06)" },
@@ -531,7 +603,6 @@ export default function Home() {
             >
               <span style={{ fontSize: "1rem" }}>📝</span>
               <span>My Profile</span>
-              <span style={{ marginLeft: "auto", fontSize: "0.5rem", fontWeight: 700, backgroundColor: filledCount > totalFields * 0.7 ? "rgba(52,211,153,0.15)" : "rgba(255,191,36,0.15)", color: filledCount > totalFields * 0.7 ? "#34d399" : "#fbbf24", borderRadius: "9999px", padding: "1px 7px" }}>{Math.round((filledCount / totalFields) * 100)}%</span>
             </div>
           </nav>
 
@@ -543,17 +614,10 @@ export default function Home() {
             <p style={{ marginTop: "0.25rem", fontSize: "1.5rem", fontWeight: 800, letterSpacing: "-0.04em", color: totalRuns ? "#34d399" : "rgba(255,255,255,0.1)", margin: "0.25rem 0 0" }}>{successRate}</p>
           </div>
 
-          {/* Profile fill */}
+          {/* Profile link */}
           <div style={{ marginTop: "0.75rem", borderRadius: "0.75rem", border: "1px solid rgba(255,255,255,0.07)", backgroundColor: "rgba(255,255,255,0.03)", padding: "0.875rem 1rem" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
-              <p style={{ fontSize: "0.625rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.12em", color: "rgba(255,255,255,0.2)", margin: 0 }}>Profile filled</p>
-              <p style={{ fontSize: "0.625rem", fontWeight: 700, color: "rgba(255,255,255,0.35)", margin: 0 }}>{filledCount}/{totalFields}</p>
-            </div>
-            <div style={{ height: "3px", borderRadius: "9999px", backgroundColor: "rgba(255,255,255,0.07)", overflow: "hidden" }}>
-              <div style={{ height: "100%", borderRadius: "9999px", backgroundColor: filledCount > totalFields * 0.7 ? "#34d399" : filledCount > totalFields * 0.3 ? "#fbbf24" : "rgba(255,255,255,0.3)", width: `${(filledCount / totalFields) * 100}%`, transition: "width 0.4s" }} />
-            </div>
-            <button onClick={() => navigate("/form")} style={{ marginTop: "0.5rem", fontSize: "0.5625rem", color: "rgba(255,255,255,0.3)", background: "none", border: "none", cursor: "pointer", padding: 0, fontFamily: S.font, textDecoration: "underline" }}>
-              {filledCount < totalFields * 0.5 ? "⚠️ Complete your profile for better results →" : "Edit profile →"}
+            <button onClick={() => navigate("/form")} style={{ fontSize: "0.5625rem", color: "rgba(255,255,255,0.3)", background: "none", border: "none", cursor: "pointer", padding: 0, fontFamily: S.font, textDecoration: "underline" }}>
+              Edit profile →
             </button>
           </div>
 
@@ -609,7 +673,6 @@ export default function Home() {
             >
               <span>📝</span>
               <span>Profile</span>
-              <span style={{ fontSize: "0.5625rem", color: filledCount > totalFields * 0.7 ? "#34d399" : "#fbbf24" }}>{Math.round((filledCount / totalFields) * 100)}%</span>
             </button>
 
             {page === "agent" && (
@@ -710,6 +773,59 @@ export default function Home() {
                 </div>
               )}
 
+              {/* ── OTP Panel ── */}
+              {otpRequired && (
+                <div style={{ margin: "0.875rem 1.25rem 0", borderRadius: "0.875rem", border: "1px solid rgba(167,139,250,0.35)", backgroundColor: "rgba(167,139,250,0.06)", overflow: "hidden" }} className="animate-fade-up">
+                  <div style={{ padding: "0.875rem 1.125rem", borderBottom: "1px solid rgba(167,139,250,0.15)", display: "flex", alignItems: "center", gap: "0.625rem" }}>
+                    <span style={{ fontSize: "1.25rem" }}>🔐</span>
+                    <div>
+                      <p style={{ margin: 0, fontSize: "0.8125rem", fontWeight: 700, color: "rgba(167,139,250,0.95)" }}>OTP / Verification Code Required</p>
+                      <p style={{ margin: 0, fontSize: "0.6875rem", color: "rgba(255,255,255,0.3)" }}>{otpHint || "The form is asking for a verification code sent to your phone or email."}</p>
+                    </div>
+                  </div>
+                  <div style={{ padding: "1rem 1.125rem" }}>
+                    <Label>Enter OTP / Verification Code <span style={{ color: "rgba(248,113,113,0.7)" }}>*</span></Label>
+                    <div style={{ display: "flex", gap: "0.625rem", alignItems: "center" }}>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        placeholder="e.g. 123456"
+                        value={otpValue}
+                        onChange={e => setOtpValue(e.target.value.replace(/\D/g, "").slice(0, 8))}
+                        onKeyDown={e => { if (e.key === "Enter") handleOtpSubmit(); }}
+                        autoFocus
+                        style={{
+                          flex: 1, boxSizing: "border-box", borderRadius: "0.625rem",
+                          border: "1px solid rgba(167,139,250,0.35)",
+                          backgroundColor: "rgba(167,139,250,0.06)",
+                          padding: "0.6875rem 0.875rem", fontSize: "1.125rem", fontWeight: 700,
+                          color: "white", outline: "none", letterSpacing: "0.2em",
+                          fontFamily: S.font, textAlign: "center",
+                        }}
+                      />
+                      <button
+                        onClick={handleOtpSubmit}
+                        disabled={!otpValue.trim()}
+                        style={{
+                          flexShrink: 0, borderRadius: "0.625rem", padding: "0.6875rem 1.25rem",
+                          fontSize: "0.875rem", fontWeight: 700, cursor: otpValue.trim() ? "pointer" : "not-allowed",
+                          opacity: otpValue.trim() ? 1 : 0.4,
+                          backgroundColor: "#a78bfa", color: "white", border: "none",
+                          fontFamily: S.font, transition: "all 0.15s",
+                        }}
+                        onMouseEnter={e => { if (otpValue.trim()) e.currentTarget.style.backgroundColor = "#9061f9"; }}
+                        onMouseLeave={e => { e.currentTarget.style.backgroundColor = "#a78bfa"; }}
+                      >
+                        Submit OTP →
+                      </button>
+                    </div>
+                    <p style={{ margin: "0.5rem 0 0", fontSize: "0.6875rem", color: "rgba(255,255,255,0.2)" }}>
+                      💡 Check your phone (SMS) or email inbox for the code. Press Enter or click Submit OTP to continue.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {/* ── Error ── */}
               {status === "error" && msg && (
                 <div style={{ margin: "0.875rem 1.25rem 0", borderRadius: "0.625rem", border: "1px solid rgba(248,113,113,0.2)", backgroundColor: "rgba(248,113,113,0.06)", padding: "0.75rem 1rem", fontSize: "0.8125rem", fontWeight: 500, color: "#f87171" }}>{msg}</div>
@@ -755,6 +871,25 @@ export default function Home() {
                 <p style={{ margin: 0, fontSize: "0.875rem", fontWeight: 700, color: "rgba(255,255,255,0.8)" }}>Agent Activity</p>
                 <p style={{ margin: "0.25rem 0 0", fontSize: "0.75rem", color: "rgba(255,255,255,0.25)" }}>Live step-by-step progress</p>
               </div>
+
+              {/* ── Live browser stream iframe ── */}
+              {streamingUrl && (
+                <div style={{ borderBottom: S.border, overflow: "hidden" }} className="animate-fade-up">
+                  <div style={{ padding: "0.5rem 1rem", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                      <span style={{ width: 7, height: 7, borderRadius: "50%", backgroundColor: "#34d399", flexShrink: 0 }} className="animate-pulse-dot" />
+                      <span style={{ fontSize: "0.6875rem", fontWeight: 600, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.1em" }}>Live Browser</span>
+                    </div>
+                    <a href={streamingUrl} target="_blank" rel="noreferrer" style={{ fontSize: "0.625rem", color: "rgba(255,255,255,0.2)", textDecoration: "none" }}>Open full screen ↗</a>
+                  </div>
+                  <iframe
+                    src={streamingUrl}
+                    style={{ width: "100%", height: "280px", border: "none", display: "block", backgroundColor: "#000" }}
+                    title="Live agent browser"
+                    sandbox="allow-scripts allow-same-origin"
+                  />
+                </div>
+              )}
               <div style={{ display: "flex", flex: 1, flexDirection: "column", padding: "1.5rem" }}>
                 {/* Steps */}
                 <div style={{ display: "flex", flexDirection: "column" }}>
@@ -810,6 +945,67 @@ export default function Home() {
                           <span style={{ color: "rgba(255,255,255,0.15)", marginRight: "0.5rem" }}>›</span>{line}
                         </div>
                       ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Skipped / Unfilled Fields Panel ── */}
+                {skippedFields.length > 0 && (
+                  <div style={{ marginTop: "1rem", borderRadius: "0.875rem", border: "1px solid rgba(251,191,36,0.2)", backgroundColor: "rgba(251,191,36,0.03)", overflow: "hidden" }} className="animate-fade-up">
+                    {/* header */}
+                    <div style={{ padding: "0.75rem 1rem", borderBottom: "1px solid rgba(251,191,36,0.12)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                        <span style={{ fontSize: "1rem" }}>📋</span>
+                        <div>
+                          <p style={{ margin: 0, fontSize: "0.8125rem", fontWeight: 700, color: "rgba(251,191,36,0.9)" }}>
+                            {skippedFields.filter(f => f.required).length > 0
+                              ? `${skippedFields.filter(f=>f.required).length} required · ${skippedFields.filter(f=>!f.required).length} optional skipped`
+                              : `${skippedFields.length} optional field${skippedFields.length !== 1 ? "s" : ""} skipped`
+                            }
+                          </p>
+                          <p style={{ margin: 0, fontSize: "0.625rem", color: "rgba(255,255,255,0.25)" }}>Questions the agent left blank on this form</p>
+                        </div>
+                      </div>
+                      <button onClick={() => navigate("/form")} style={{ flexShrink: 0, background: "none", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "0.375rem", padding: "0.3rem 0.625rem", fontSize: "0.625rem", fontWeight: 600, color: "rgba(255,255,255,0.4)", cursor: "pointer", fontFamily: S.font, whiteSpace: "nowrap" }}>💾 Save to Profile</button>
+                    </div>
+
+                    {/* required fields first */}
+                    {skippedFields.filter(f => f.required).length > 0 && (
+                      <div style={{ padding: "0.625rem 1rem 0" }}>
+                        <p style={{ margin: "0 0 0.4rem", fontSize: "0.5625rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "#f87171" }}>⚠ Required — couldn't be filled</p>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
+                          {skippedFields.filter(f => f.required).map((f, i) => (
+                            <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: "0.5rem", borderRadius: "0.5rem", border: "1px solid rgba(248,113,113,0.15)", backgroundColor: "rgba(248,113,113,0.05)", padding: "0.5rem 0.75rem" }}>
+                              <span style={{ marginTop: 2, width: 6, height: 6, borderRadius: "50%", backgroundColor: "#f87171", flexShrink: 0 }} />
+                              <div style={{ minWidth: 0 }}>
+                                <p style={{ margin: 0, fontSize: "0.75rem", fontWeight: 600, color: "rgba(255,255,255,0.8)" }}>{f.label}</p>
+                                {f.reason && <p style={{ margin: "0.15rem 0 0", fontSize: "0.625rem", color: "rgba(255,255,255,0.3)" }}>{f.reason}</p>}
+                              </div>
+                              <span style={{ flexShrink: 0, marginLeft: "auto", fontSize: "0.5rem", fontWeight: 700, color: "rgba(248,113,113,0.7)", border: "1px solid rgba(248,113,113,0.2)", borderRadius: "0.25rem", padding: "0.1rem 0.4rem", textTransform: "uppercase" }}>{f.type || "text"}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* optional fields */}
+                    {skippedFields.filter(f => !f.required).length > 0 && (
+                      <div style={{ padding: "0.625rem 1rem" }}>
+                        <p style={{ margin: "0 0 0.4rem", fontSize: "0.5625rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(255,255,255,0.2)" }}>Optional — not filled</p>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+                          {skippedFields.filter(f => !f.required).map((f, i) => (
+                            <div key={i} style={{ display: "flex", alignItems: "center", gap: "0.5rem", borderRadius: "0.5rem", border: "1px solid rgba(255,255,255,0.06)", backgroundColor: "rgba(255,255,255,0.02)", padding: "0.4rem 0.75rem" }}>
+                              <span style={{ width: 5, height: 5, borderRadius: "50%", backgroundColor: "rgba(255,255,255,0.2)", flexShrink: 0 }} />
+                              <p style={{ margin: 0, fontSize: "0.75rem", color: "rgba(255,255,255,0.45)", flex: 1 }}>{f.label}</p>
+                              {f.reason && <p style={{ margin: 0, fontSize: "0.5625rem", color: "rgba(255,255,255,0.2)" }}>{f.reason}</p>}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div style={{ padding: "0.5rem 1rem 0.75rem", fontSize: "0.5625rem", color: "rgba(255,255,255,0.18)" }}>
+                      💡 Add these answers to your Profile so the agent fills them automatically next time.
                     </div>
                   </div>
                 )}

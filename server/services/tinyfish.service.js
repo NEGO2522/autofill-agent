@@ -10,16 +10,42 @@ function detectPlatform(url) {
     name: "Unstop",
     hints: `
 PLATFORM: Unstop (formerly Dare2Compete)
-- Click "Register" or "Participate" button first if present.
-- Unstop uses multi-step forms — complete each step before clicking Next.
-- Team registration: fill "Team Name" and add teammates by email if required.
-- Resume upload: use the file upload button in the profile/registration section.
-- College name field: type the college name and select from the dropdown suggestions.
-- "About Yourself" or "Why do you want to participate?": use the bio/cover letter from profile.
-- For skill selection: click each skill tag that matches the profile skills list.
-- Social links section: fill LinkedIn and GitHub from profile.
-- Accept all checkboxes (terms, consent, communication preferences).
-- After each step, wait for page to load before continuing.
+
+CRITICAL — AUTHENTICATION FIRST:
+- Before doing anything else, check if the user is already logged in to Unstop.
+- If NOT logged in: look for a "Login" or "Sign In" button/link on the page or in the header.
+  - Click it and log in using the email from the profile.
+  - If login fails (wrong password / no account), STOP and report: "Login required — please log in to Unstop manually first, then re-run the agent."
+  - Do NOT proceed with registration if not logged in — Unstop will NOT send a confirmation email without a valid account session.
+- If already logged in: proceed directly to the registration steps below.
+
+REGISTRATION STEPS:
+1. Navigate to the competition URL and wait for full page load.
+2. Click "Register", "Participate", or "Apply" button if present.
+3. Unstop uses multi-step registration forms — complete EVERY step before clicking Next/Continue.
+4. Step-by-step field filling:
+   - Personal details: name, email, phone, college/university (type and select from autocomplete dropdown).
+   - College name: type slowly and wait for suggestions — select the matching one from dropdown.
+   - Team registration (if applicable): fill "Team Name" from profile; add teammates by email if required.
+   - "About Yourself" / "Why do you want to participate?" / "Tell us about yourself": use the bio field from profile.
+   - Skills: click each skill tag that matches the profile skills list.
+   - Social links: fill LinkedIn URL and GitHub URL from profile.
+   - Resume upload: if a file upload button appears, click it and upload the resume file.
+   - Education: fill degree, branch, graduation year, CGPA from profile.
+5. Accept ALL checkboxes: terms & conditions, consent, communication preferences, privacy policy.
+6. After each step, wait for the page transition before continuing to the next step.
+7. On the FINAL step, click the Submit / Register / Confirm button.
+
+CONFIRMATION DETECTION (CRITICAL):
+- True success on Unstop looks like ONE of these:
+  a) The page URL changes to something like: unstop.com/competitions/.../registered OR unstop.com/dashboard
+  b) A green banner/toast appears saying "Successfully registered" or "Registration successful"
+  c) A modal popup confirms registration with a "You're registered!" message
+  d) The "Register" button changes to "Registered" or becomes disabled/grayed out
+- Only report success if you see ONE of the above. Do NOT report success just because you clicked the final button.
+- If you see a CAPTCHA, OTP verification, or payment page: STOP and report it immediately.
+- If you see an error like "already registered" — report that the user may already be registered.
+- After confirmed success, check if the page says "A confirmation email has been sent" — report this to the user.
 `
   };
 
@@ -162,10 +188,28 @@ PLATFORM: Unknown / Generic Web Form
 /* ══════════════════════════════════════════════════════
    GOAL BUILDER
 ══════════════════════════════════════════════════════ */
-function buildGoal(url, profile, extraFields = {}) {
+function buildGoal(url, profile, extraFields = {}, otpValue = "") {
   const fullName = `${profile.firstName || ""} ${profile.lastName || ""}`.trim() || profile.name || "";
   const platform = detectPlatform(url);
   const merged = { ...profile, ...extraFields };
+
+  const backendUrl = process.env.BACKEND_URL || "http://localhost:5000";
+  const otpSection = otpValue ? `
+## OTP / VERIFICATION CODE
+The user has provided the following OTP/verification code: ${otpValue}
+If the page is showing an OTP input field, type this code into the OTP/verification field and click Verify/Confirm/Submit.
+` : sessionId ? `
+## OTP HANDLING RULE — VERY IMPORTANT
+If at any point you see an OTP input field, a "Enter verification code" screen, or any screen asking for a code sent via SMS or email:
+1. DO NOT guess or make up a code.
+2. Make a GET request to: ${backendUrl}/api/agent/get-otp?sessionId=${sessionId}
+   - If the response is {"otp": "<code>"} — type that code into the OTP field and click Verify.
+   - If the response is {"waiting": true} — wait 5 seconds and try again (poll up to 24 times = 2 minutes).
+3. The user will type their OTP into the app while you wait.
+` : `
+## OTP HANDLING RULE
+If you encounter an OTP/verification screen, stop and report it. Do not guess codes.
+`;
 
   return `
 You are an expert form-filling AI agent specialised in completing web registrations, job applications, hackathon sign-ups, and all kinds of online forms quickly and accurately.
@@ -246,6 +290,7 @@ Use this data to fill every matching field on the page:
 
 ${Object.keys(extraFields).length > 0 ? `### Extra Fields Provided by User\n${Object.entries(extraFields).map(([k,v]) => `- ${k}: ${v}`).join("\n")}` : ""}
 
+${otpSection}
 ## PLATFORM-SPECIFIC INSTRUCTIONS
 ${platform.hints}
 
@@ -287,9 +332,37 @@ NEEDS_INPUT:{"fields":[{"label":"<field label>","type":"<text|email|tel|select|t
 }
 
 /* ══════════════════════════════════════════════════════
+   OTP WAIT STORE
+   When agent hits an OTP screen:
+     1. server stores a Promise resolver keyed by sessionId
+     2. frontend calls POST /api/agent/submit-otp with { sessionId, otp }
+     3. server resolves the promise → agent goal gets the code and types it
+══════════════════════════════════════════════════════ */
+export const otpWaiters = new Map();
+// Map<sessionId, { resolve: (otp: string) => void, createdAt: number }>
+
+export function waitForOtp(sessionId, timeoutMs = 120_000) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      otpWaiters.delete(sessionId);
+      reject(new Error("OTP timeout — user did not enter code within 2 minutes."));
+    }, timeoutMs);
+
+    otpWaiters.set(sessionId, {
+      resolve: (otp) => {
+        clearTimeout(timer);
+        otpWaiters.delete(sessionId);
+        resolve(otp);
+      },
+      createdAt: Date.now(),
+    });
+  });
+}
+
+/* ══════════════════════════════════════════════════════
    STREAM AGENT
 ══════════════════════════════════════════════════════ */
-export const streamAgent = async (url, profile, extraFields, res) => {
+export const streamAgent = async (url, profile, extraFields, res, otpValue = "", sessionId = "") => {
   const send = (event, data) => {
     res.write(`event: ${event}\n`);
     res.write(`data: ${JSON.stringify(data)}\n\n`);
@@ -300,7 +373,8 @@ export const streamAgent = async (url, profile, extraFields, res) => {
       "https://agent.tinyfish.ai/v1/automation/run-sse",
       {
         url,
-        goal: buildGoal(url, profile, extraFields),
+        goal: buildGoal(url, profile, extraFields, otpValue),
+        browser_profile: "stealth",   // needed for bot-protected sites like Unstop
       },
       {
         headers: {
@@ -324,91 +398,91 @@ export const streamAgent = async (url, profile, extraFields, res) => {
         if (!trimmed.startsWith("data:")) continue;
 
         const raw = trimmed.replace(/^data:\s*/, "");
-        if (raw === "[DONE]") continue;
-
-        // ── SKIPPED_FIELDS plain-text signal ──
-        if (raw.startsWith("SKIPPED_FIELDS:")) {
-          try {
-            const payload = JSON.parse(raw.slice("SKIPPED_FIELDS:".length));
-            send("skipped_fields", { fields: payload.fields || [] });
-          } catch { /* malformed, ignore */ }
-          continue;
-        }
-
-        // ── NEEDS_INPUT plain-text signal ──
-        if (raw.startsWith("NEEDS_INPUT:")) {
-          try {
-            const payload = JSON.parse(raw.slice("NEEDS_INPUT:".length));
-            if (payload.fields && payload.fields.length > 0) {
-              send("needs_input", { fields: payload.fields });
-            }
-          } catch { /* malformed, ignore */ }
-          continue;
-        }
+        if (!raw || raw === "[DONE]") continue;
 
         try {
           const evt = JSON.parse(raw);
-          const msgText = typeof evt.message === "string" ? evt.message : "";
+          const evtType   = (evt.type   || "").toUpperCase();
+          const evtStatus = (evt.status || "").toUpperCase();
 
-          // Check for embedded SKIPPED_FIELDS inside a message
-          const sfMatch = msgText.match(/SKIPPED_FIELDS:(\{.*?\})/s);
-          if (sfMatch) {
-            try {
-              const payload = JSON.parse(sfMatch[1]);
-              send("skipped_fields", { fields: payload.fields || [] });
-            } catch { /* malformed */ }
+          // ── Streaming URL ── forward it so UI can show live browser feed
+          if (evtType === "STREAMING_URL" && evt.streamingUrl) {
+            send("streaming_url", { url: evt.streamingUrl });
+            continue;
           }
 
-          // Check for embedded NEEDS_INPUT inside a message
-          const niMatch = msgText.match(/NEEDS_INPUT:(\{.*?\})/s);
-          if (niMatch) {
-            try {
-              const payload = JSON.parse(niMatch[1]);
-              if (payload.fields && payload.fields.length > 0) {
-                send("needs_input", { fields: payload.fields });
-              }
-            } catch { /* malformed */ }
-          }
+          // ── THE ONLY REAL DONE: type=COMPLETE AND status=COMPLETED ──
+          if (evtType === "COMPLETE" && evtStatus === "COMPLETED") {
+            const result = evt.resultJson || {};
 
-          send("message", evt);
+            // Parse any skipped/needs fields from resultJson if agent embedded them
+            if (result.skipped_fields) send("skipped_fields", { fields: result.skipped_fields });
+            if (result.needs_input)    send("needs_input",    { fields: result.needs_input    });
 
-          // Structural done
-          const isStructuralDone =
-            evt.type === "result"    || evt.type === "done"     ||
-            evt.type === "complete"  || evt.type === "finished" ||
-            evt.status === "completed" || evt.status === "success" ||
-            evt.status === "done"    || evt.status === "finished" ||
-            evt.finished === true    || evt.done === true;
+            // Check resultJson for confirmation signals
+            const resultStr = JSON.stringify(result).toLowerCase();
+            const confirmed = [
+              /registered/i, /submitted/i, /confirmation/i, /success/i, /you.{0,20}in/i,
+            ].some(r => r.test(resultStr));
 
-          const msg = msgText.toLowerCase();
-          const confirmSignals = [
-            /thank.{0,10}(you|registr|submiss|appl)/i,
-            /successfull?y\s+(submitted|registered|applied|sent)/i,
-            /your (application|registration|submission|form) (has been|was) (submitted|received|sent)/i,
-            /confirmation (number|id|code)/i,
-            /you.{0,20}(registered|applied|signed up)/i,
-          ];
-          const confirmedByMessage = confirmSignals.some(r => r.test(msg));
-
-          if (isStructuralDone || confirmedByMessage) {
             send("done", {
               success: true,
-              confirmed: isStructuralDone || confirmedByMessage,
-              message: confirmedByMessage
-                ? "Form submitted — confirmation detected on page!"
-                : "Agent finished. Check the browser to confirm submission.",
+              confirmed,
+              message: confirmed
+                ? "✅ Registration confirmed!"
+                : "Agent completed. Please check the form page to verify submission.",
+              result,
             });
             res.end();
             return;
           }
+
+          // ── PROGRESS events — forward as messages to show in live console ──
+          if (evtType === "PROGRESS" || evtType === "STARTED") {
+            const progressText = evt.purpose || evt.message || evt.log || JSON.stringify(evt);
+
+            // Detect SKIPPED_FIELDS embedded in progress text
+            const sfMatch = progressText.match(/SKIPPED_FIELDS:(\{[\s\S]*?\})/);
+            if (sfMatch) {
+              try {
+                const p = JSON.parse(sfMatch[1]);
+                if (p.fields) send("skipped_fields", { fields: p.fields });
+              } catch { /* malformed */ }
+            }
+
+            // Detect NEEDS_INPUT embedded in progress text
+            const niMatch = progressText.match(/NEEDS_INPUT:(\{[\s\S]*?\})/);
+            if (niMatch) {
+              try {
+                const p = JSON.parse(niMatch[1]);
+                if (p.fields?.length) send("needs_input", { fields: p.fields });
+              } catch { /* malformed */ }
+            }
+
+            send("message", { message: progressText, raw: evt });
+            continue;
+          }
+
+          // ── ERROR from TinyFish ──
+          if (evtType === "ERROR" || evtType === "FAILED") {
+            send("error", { message: evt.message || evt.error || "Agent encountered an error." });
+            res.end();
+            return;
+          }
+
+          // ── Any other event type — forward as a plain message ──
+          send("message", { message: evt.purpose || evt.message || JSON.stringify(evt), raw: evt });
+
         } catch {
-          if (raw) send("log", { message: raw });
+          // Raw non-JSON line — forward as log
+          if (raw.trim()) send("log", { message: raw });
         }
       }
     });
 
     response.data.on("end", () => {
-      send("done", { success: true, message: "Agent finished." });
+      // Stream ended without a COMPLETE event — warn user
+      send("done", { success: false, confirmed: false, message: "⚠️ Agent stream ended without confirmation. Please check the form page manually." });
       res.end();
     });
 

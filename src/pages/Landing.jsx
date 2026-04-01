@@ -544,7 +544,7 @@ export default function Landing() {
             {/* CTAs */}
             <div style={{ display:"flex", gap:"0.875rem", flexWrap:"wrap", marginBottom:"3rem" }}>
               {user ? (
-                <button onClick={() => navigate('/home')} style={{
+                <button onClick={() => navigate('/form')} style={{
                   background:"white", color:"black", border:"none",
                   borderRadius:"0.75rem", padding:"0.875rem 2rem",
                   fontSize:"0.9375rem", fontWeight:700,
@@ -683,7 +683,7 @@ export default function Landing() {
           <p style={{ fontSize:"0.9375rem", color:S.muted, marginBottom:"2.5rem" }}>
             {user ? "Continue to your dashboard to manage your form automation." : "Join 3,000+ teams who automated the tedious stuff."}
           </p>
-          <button onClick={() => user ? navigate('/home') : handleCTA("signup")} style={{
+          <button onClick={() => user ? navigate('/form') : handleCTA("signup")} style={{
             background:"white", color:"black", border:"none",
             borderRadius:"0.75rem", padding:"1rem 2.5rem",
             fontSize:"1rem", fontWeight:700,

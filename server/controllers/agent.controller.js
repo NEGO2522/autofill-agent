@@ -1,4 +1,5 @@
-import { streamAgent } from "../services/tinyfish.service.js";
+import crypto from "crypto";
+import { streamAgent, otpWaiters, waitForOtp } from "../services/tinyfish.service.js";
 
 /**
  * SSE endpoint — streams TinyFish agent progress to the browser in real time.
@@ -103,7 +104,23 @@ export const runAgentStream = async (req, res) => {
     formContext:        q.formContext      || "",
   };
 
-  await streamAgent(url, profile, extraFields, res);
+  const otpValue = q.otp || "";
+  const sessionId = crypto.randomUUID();
+
+  // Tell the frontend the sessionId so it can submit OTP to the right session
+  const send = (event, data) => {
+    res.write(`event: ${event}\n`);
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+  };
+  send("session", { sessionId });
+
+  // Store the send function so routes can push otp_required to this SSE stream
+  otpWaiters.set(`__send_${sessionId}`, ({ event, data }) => send(event, data));
+  req.on("close", () => otpWaiters.delete(`__send_${sessionId}`));
+
+  await streamAgent(url, profile, extraFields, res, otpValue, sessionId);
+
+  otpWaiters.delete(`__send_${sessionId}`);
 
   clearInterval(keepAlive);
 };
