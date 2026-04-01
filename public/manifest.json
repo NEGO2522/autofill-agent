@@ -5,9 +5,15 @@
   "description": "AI-powered form autofill agent that uses your saved profile.",
   "permissions": ["storage", "activeTab", "scripting"],
   "host_permissions": ["https://*/*", "http://*/*"],
+  "icons": {
+    "16": "favicon.svg",
+    "48": "favicon.svg",
+    "128": "favicon.svg"
+  },
   "action": {
     "default_popup": "index.html",
-    "default_title": "AutoSlay Agent"
+    "default_title": "AutoSlay Agent",
+    "default_icon": "favicon.svg"
   },
   "content_scripts": [
     {
