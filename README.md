@@ -1,51 +1,30 @@
 # AutoFill Agent
 
-**AutoFill Agent** is an AI-powered web automation tool that intelligently fills out online forms on your behalf. Simply provide a target URL and your profile details — the agent handles the rest.
+**AutoFill Agent** is a profile management platform built with React, Tailwind CSS, and Firebase. It allows you to store your personal, academic, and document details once, so they can be securely accessed when filling out forms or applications.
 
 ---
 
-## What It Does
+## 🚀 Key Flow
 
-AutoFill Agent uses an AI-driven backend to navigate to any web form, analyze its fields, and automatically fill them in using the profile data you provide. It simulates real user interaction, making form submission effortless and fast.
-
----
-
-## Features
-
-- **URL-based targeting** — Point the agent to any form on the web
-- **AI-powered field detection** — Automatically identifies and maps form fields
-- **Real-time status updates** — Watch the agent work step by step in the UI
-- **Profile-based input** — Your data stays local and is sent only when you trigger the agent
-- **One-click automation** — Fill and submit forms in seconds
+1. **Landing Page** — Introduces the "AutoSlay" ecosystem.
+2. **Authentication** — Sign in or create an account via Firebase Auth (Google Auth supported).
+3. **Profile Setup (`Form.jsx`)** — Complete your profile including personal data, college details, and document uploads.
+4. **Cloudinary Integration** — Resumes and Photo IDs are stored securely on Cloudinary.
+5. **Dashboard (`Home.jsx`)** — Overview of your profile and links to the Chrome Extension.
 
 ---
 
-## Project Structure
+## ✨ Features
 
-```
-autofill-agent/
-├── src/
-│   ├── api/
-│   │   └── agent.js          # API call to backend agent
-│   ├── pages/
-│   │   └── Home.jsx          # Main UI page
-│   ├── components/           # Reusable UI components
-│   ├── firebase/             # Firebase config (if used)
-│   ├── App.jsx               # App routing
-│   └── main.jsx              # Entry point
-├── server/
-│   ├── controllers/          # Request handlers
-│   ├── routes/               # API routes
-│   ├── services/             # Agent logic & automation
-│   └── index.js              # Express server entry
-├── public/
-├── index.html
-└── vite.config.js
-```
+- **Profile Storage** — Store your name, email, phone, college details, and more in **Firebase Firestore**.
+- **Document Management** — Upload your Resume and College ID to **Cloudinary**.
+- **Modern UI** — A premium, dark-themed interface built with **Tailwind CSS**.
+- **Responsive Design** — Fully optimized for desktop and mobile.
+- **Secure Auth** — Managed by **Firebase Authentication**.
 
 ---
 
-## Getting Started
+## 🛠️ Getting Started
 
 ### Prerequisites
 
@@ -58,39 +37,34 @@ git clone https://github.com/your-username/autofill-agent.git
 cd autofill-agent
 ```
 
-### 2. Install Frontend Dependencies
+### 2. Install Dependencies
 
 ```bash
 npm install
 ```
 
-### 3. Install Backend Dependencies
+### 3. Configure Environment Variables
 
-```bash
-cd server
-npm install
-```
-
-### 4. Configure Environment Variables
-
-Create a `.env` file inside the `server/` directory:
+Create a `.env` file in the root directory:
 
 ```env
-PORT=5000
-OPENAI_API_KEY=your_openai_api_key_here
+# Firebase Config
+VITE_FIREBASE_API_KEY=your_apiKey
+VITE_FIREBASE_AUTH_DOMAIN=your_authDomain
+VITE_FIREBASE_PROJECT_ID=your_projectId
+VITE_FIREBASE_STORAGE_BUCKET=your_storageBucket
+VITE_FIREBASE_MESSAGING_SENDER_ID=your_messagingSenderId
+VITE_FIREBASE_APP_ID=your_appId
+VITE_FIREBASE_MEASUREMENT_ID=your_measurementId
+
+# Cloudinary Config
+VITE_CLOUDINARY_CLOUD_NAME=your_cloud_name
+VITE_CLOUDINARY_UPLOAD_PRESET=your_upload_preset
 ```
 
-### 5. Run the Backend Server
+### 4. Run the Project
 
 ```bash
-cd server
-node index.js
-```
-
-### 6. Run the Frontend
-
-```bash
-# In the root directory
 npm run dev
 ```
 
@@ -98,48 +72,28 @@ Open your browser and visit `http://localhost:5173`
 
 ---
 
-## How to Use
-
-1. Enter the **URL** of the form you want to fill
-2. Provide your **Name**, **Email**, and **Phone** in the profile fields
-3. Click **Auto Fill Form**
-4. Watch the real-time status updates as the agent works
-5. Done! The form is filled and submitted automatically
-
----
-
-## API Endpoint
-
-The frontend communicates with the backend via:
+## 🏗️ Project Structure
 
 ```
-POST http://localhost:5000/api/agent/run
-```
-
-**Request Body:**
-```json
-{
-  "url": "https://example.com/form",
-  "profile": {
-    "name": "John Doe",
-    "email": "john@example.com",
-    "phone": "1234567890"
-  }
-}
+autofill-agent/
+├── src/
+│   ├── components/    # Reusable UI components
+│   ├── contexts/      # AuthContext to manage user state
+│   ├── firebase/      # Firebase initialization & config
+│   ├── pages/         # Main pages (Landing, Login, Home, Form)
+│   ├── App.jsx        # Routing configuration
+│   └── main.jsx       # Entry point
+├── public/
+├── index.html
+└── vite.config.js
 ```
 
 ---
 
-## License
+## 🤝 License
 
-This project is licensed under the **MIT License**. See the [LICENSE](./LICENSE) file for details.
-
----
-
-## Contributing
-
-Pull requests are welcome! If you have ideas for new features or improvements, feel free to open an issue or submit a PR.
+This project is licensed under the **MIT License**.
 
 ---
 
-> Built to automate the boring stuff.
+> Built to make your application process effortless.

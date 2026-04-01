@@ -2,6 +2,8 @@ import { useNavigate } from "react-router-dom";
 import { signOut } from "firebase/auth";
 import { auth } from "../firebase/firebase";
 import { useState, useEffect } from "react";
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "../firebase/firebase";
 
 const S = {
   bg:      "#080808",
@@ -52,6 +54,47 @@ export default function Home() {
   const handleLogout = async () => {
     await signOut(auth);
     navigate("/");
+  };
+
+  const [filling, setFilling] = useState(false);
+
+  const triggerAutoFill = async () => {
+    if (typeof chrome === "undefined" || !chrome.tabs) {
+      alert("This feature only works when running as a Chrome Extension!");
+      return;
+    }
+
+    setFilling(true);
+    try {
+      // 1. Get current tab
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!tab) throw new Error("No active tab found.");
+
+      // 2. Get profile from Firestore
+      const snap = await getDoc(doc(db, "profiles", auth.currentUser.uid));
+      if (!snap.exists()) throw new Error("Please complete your profile first!");
+      
+      const profileData = snap.data();
+
+      // 3. Send message to content.js
+      chrome.tabs.sendMessage(tab.id, { 
+        action: "AUTOSLAY_FILL", 
+        profile: profileData 
+      }, (response) => {
+        if (chrome.runtime.lastError) {
+           alert("Could not connect to the page. Please refresh the page and try again.");
+           setFilling(false);
+           return;
+        }
+        if (response && response.status === "done") {
+          alert(`⚡ AutoSlay filled ${response.filled} field(s) successfully!`);
+        }
+        setFilling(false);
+      });
+    } catch (err) {
+      alert(err.message);
+      setFilling(false);
+    }
   };
 
   return (
@@ -320,15 +363,25 @@ export default function Home() {
                     fontSize: "0.75rem", fontWeight: 600,
                     color: "rgba(255,255,255,0.35)",
                     transition: "color .2s",
-                  }}>Get started →</span>
-                  <div style={{
-                    background: "white", color: "black",
-                    borderRadius: "0.625rem",
-                    padding: "0.45rem 1rem",
-                    fontSize: "0.75rem", fontWeight: 700,
-                    border: "none", cursor: "pointer",
-                    fontFamily: S.font,
-                  }}>Fill Now</div>
+                  }}>Ready to use →</span>
+                  <button 
+                    onClick={(e) => {
+                       e.stopPropagation();
+                       triggerAutoFill();
+                    }}
+                    disabled={filling}
+                    style={{
+                      background: filling ? "rgba(255,255,255,0.1)" : "white", 
+                      color: filling ? "white" : "black",
+                      borderRadius: "0.625rem",
+                      padding: "0.45rem 1rem",
+                      fontSize: "0.75rem", fontWeight: 700,
+                      border: "none", cursor: filling ? "wait" : "pointer",
+                      fontFamily: S.font,
+                    }}
+                  >
+                    {filling ? "Filling..." : "Fill Now"}
+                  </button>
                 </div>
               </div>
 
