@@ -154,7 +154,8 @@ export default function Home() {
 
       {/* ════ MAIN ════ */}
       <main style={{
-        position: "relative", zIndex: 1,
+        position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 1,
+        overflow: "hidden",
         flex: 1,
         display: "flex",
         flexDirection: "column",
@@ -414,7 +415,7 @@ export default function Home() {
               color: "rgba(255,255,255,0.15)",
             }}>Works on</p>
             <div style={{ display: "flex", flexWrap: "wrap", gap: "0.375rem", justifyContent: "center" }}>
-              {["Unstop","Devpost","Devfolio","DoraHacks","HackerEarth","HackerRank","MLH","Kaggle","AICrowd","Townscript"].map(p => (
+              {["Unstop","Devpost","Devfolio","DoraHacks","HackerEarth","HackerRank","MLH","Kaggle","AICrowd","Townscript","Google Forms"].map(p => (
                 <span key={p} style={{
                   fontSize: "0.5625rem", fontWeight: 600,
                   padding: "0.2rem 0.55rem",
@@ -425,31 +426,16 @@ export default function Home() {
                 }}>{p}</span>
               ))}
             </div>
+            <p style={{
+              marginTop: "0.5rem",
+              fontSize: "0.5625rem", fontWeight: 600,
+              color: "rgba(255,255,255,0.12)",
+              fontStyle: "italic",
+            }}>& many more platforms</p>
           </div>
 
         </div>
       </main>
-
-      {/* ════ FOOTER ════ */}
-      <footer style={{
-        position: "relative", zIndex: 1,
-        borderTop: S.border,
-        display: "flex", alignItems: "center", justifyContent: "space-between",
-        padding: "1rem 2rem", flexWrap: "wrap", gap: "0.5rem",
-      }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-          <div style={{
-            width: 22, height: 22, borderRadius: "0.4rem",
-            background: "white", color: "black",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            fontSize: "0.6875rem", fontWeight: 900,
-          }}>⚡</div>
-          <span style={{ fontSize: "0.875rem", fontWeight: 700, letterSpacing: "-0.02em" }}>AutoSlay</span>
-        </div>
-        <span style={{ fontSize: "0.6875rem", color: "rgba(255,255,255,0.15)" }}>
-          © {new Date().getFullYear()} AutoSlay · Built for hackathon warriors
-        </span>
-      </footer>
     </div>
   );
 }
