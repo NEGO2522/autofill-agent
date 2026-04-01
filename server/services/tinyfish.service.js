@@ -1,507 +1,573 @@
-import axios from "axios";
+import { chromium } from "playwright";
 
 /* ══════════════════════════════════════════════════════
-   PLATFORM DETECTION
+   AUTOFILL AGENT — Pure Playwright, Zero AI
+   ─────────────────────────────────────────────────────
+   How it works:
+     1. Playwright opens a real Chromium browser
+     2. Scans every input/select/textarea on the page
+     3. Matches each field by name/id/placeholder/label
+        against the user's saved profile
+     4. Fills matched fields directly — fast, no loops
+     5. Clicks the submit/register button
+     6. Multi-step: if a Next button exists, clicks it
+        and repeats until done or no more steps
 ══════════════════════════════════════════════════════ */
-function detectPlatform(url) {
-  const u = url.toLowerCase();
 
-  if (u.includes("unstop.com")) return {
-    name: "Unstop",
-    hints: `
-PLATFORM: Unstop (formerly Dare2Compete)
-
-CRITICAL — AUTHENTICATION FIRST:
-- Before doing anything else, check if the user is already logged in to Unstop.
-- If NOT logged in: look for a "Login" or "Sign In" button/link on the page or in the header.
-  - Click it and log in using the email from the profile.
-  - If login fails (wrong password / no account), STOP and report: "Login required — please log in to Unstop manually first, then re-run the agent."
-  - Do NOT proceed with registration if not logged in — Unstop will NOT send a confirmation email without a valid account session.
-- If already logged in: proceed directly to the registration steps below.
-
-REGISTRATION STEPS:
-1. Navigate to the competition URL and wait for full page load.
-2. Click "Register", "Participate", or "Apply" button if present.
-3. Unstop uses multi-step registration forms — complete EVERY step before clicking Next/Continue.
-4. Step-by-step field filling:
-   - Personal details: name, email, phone, college/university (type and select from autocomplete dropdown).
-   - College name: type slowly and wait for suggestions — select the matching one from dropdown.
-   - Team registration (if applicable): fill "Team Name" from profile; add teammates by email if required.
-   - "About Yourself" / "Why do you want to participate?" / "Tell us about yourself": use the bio field from profile.
-   - Skills: click each skill tag that matches the profile skills list.
-   - Social links: fill LinkedIn URL and GitHub URL from profile.
-   - Resume upload: if a file upload button appears, click it and upload the resume file.
-   - Education: fill degree, branch, graduation year, CGPA from profile.
-5. Accept ALL checkboxes: terms & conditions, consent, communication preferences, privacy policy.
-6. After each step, wait for the page transition before continuing to the next step.
-7. On the FINAL step, click the Submit / Register / Confirm button.
-
-CONFIRMATION DETECTION (CRITICAL):
-- True success on Unstop looks like ONE of these:
-  a) The page URL changes to something like: unstop.com/competitions/.../registered OR unstop.com/dashboard
-  b) A green banner/toast appears saying "Successfully registered" or "Registration successful"
-  c) A modal popup confirms registration with a "You're registered!" message
-  d) The "Register" button changes to "Registered" or becomes disabled/grayed out
-- Only report success if you see ONE of the above. Do NOT report success just because you clicked the final button.
-- If you see a CAPTCHA, OTP verification, or payment page: STOP and report it immediately.
-- If you see an error like "already registered" — report that the user may already be registered.
-- After confirmed success, check if the page says "A confirmation email has been sent" — report this to the user.
-`
-  };
-
-  if (u.includes("devfolio.co")) return {
-    name: "Devfolio",
-    hints: `
-PLATFORM: Devfolio
-- Log-in / sign-up may already be handled. Skip auth if already logged in.
-- Devfolio hackathon applications have sections: About You, Your Project, Team, Links.
-- "Tell us about yourself": use the bio from profile.
-- "What are you building?": use projectName + projectDescription from profile.
-- Tech stack field: use the techStack or skills from profile.
-- GitHub link: use the github field from profile.
-- Portfolio: use the portfolio field.
-- Team size / looking for teammates: fill teamSize from profile.
-- Resume upload: upload the resume file if a file upload is present.
-- "Why do you want to attend?": generate a short enthusiastic answer about learning and building.
-- T-shirt size dropdown: pick M as default if not specified.
-- Accept all checkboxes including Code of Conduct and MLH terms.
-`
-  };
-
-  if (u.includes("devpost.com")) return {
-    name: "Devpost",
-    hints: `
-PLATFORM: Devpost
-- Devpost registration asks for: name, email, skills, experience level, what you want to learn.
-- "What are your skills?": use skills list from profile.
-- "Experience level": pick based on experience years — 0-1=Beginner, 1-3=Intermediate, 3+=Advanced.
-- "What are you hoping to learn?": generate a short answer about learning new tech and solving problems.
-- Team tab: fill team name from profile.
-- Project submission (if applicable): fill project name, description, tech stack, demo link, GitHub repo.
-- "Built with" tags: extract tech names from techStack/skills and add each one.
-- Video demo URL: use demoLink from profile if available.
-- Accept Code of Conduct checkbox.
-- MLH (Major League Hacking) consent checkboxes: accept all.
-`
-  };
-
-  if (u.includes("docs.google.com/forms") || u.includes("forms.gle")) return {
-    name: "Google Forms",
-    hints: `
-PLATFORM: Google Forms
-- Google Forms render all fields on one page (or paginated sections).
-- Short answer fields: fill with the most relevant profile value based on the question label.
-- Paragraph fields: use bio, projectDescription, or a generated answer.
-- Multiple choice / radio: select the best matching option.
-- Checkboxes: select all that apply from the profile.
-- Dropdown: pick the best match.
-- File upload questions: upload resume or college ID from profile if asked.
-- Date fields: use the correct format shown by the input.
-- Linear scale: pick 4 or 5 out of 5 for positive questions (interest, experience, etc.).
-- After all fields are filled, click the "Submit" button.
-- Do NOT refresh the page — Google Forms loses progress on refresh.
-`
-  };
-
-  if (u.includes("linkedin.com/jobs") || u.includes("linkedin.com/apply")) return {
-    name: "LinkedIn Easy Apply",
-    hints: `
-PLATFORM: LinkedIn Easy Apply
-- LinkedIn Easy Apply is a multi-step modal dialog.
-- Contact info step: verify name, email, phone — fill if empty.
-- Resume step: upload resume if file upload is shown, or use the existing saved resume.
-- Questions step: answer screening questions using profile data.
-  - Years of experience questions: use the experience number from profile.
-  - "Are you legally authorized to work in X?": answer Yes.
-  - "Do you require sponsorship?": answer No (unless profile specifies otherwise).
-  - Salary/pay expectation: use expectedCtc from profile if available, else leave blank.
-- Review step: scroll through and confirm all answers.
-- Submit application.
-`
-  };
-
-  if (u.includes("greenhouse.io") || u.includes("lever.co") || u.includes("workday") || u.includes("taleo") || u.includes("icims") || u.includes("smartrecruiters") || u.includes("ashbyhq") || u.includes("jobs.")) return {
-    name: "Career / ATS Portal",
-    hints: `
-PLATFORM: Company Career Page / ATS System
-- Personal info: fill name, email, phone from profile.
-- Resume upload: upload the resume file. This is critical for job applications.
-- Cover letter: use the bio/cover letter from profile.
-- LinkedIn profile URL: use the linkedin field from profile.
-- Work authorization / visa status: answer "Yes, authorized to work" / "No sponsorship needed" by default.
-- Salary expectation: use expectedCtc from profile or leave blank.
-- "How did you hear about us?": select "LinkedIn" or "Job Board" from dropdown.
-- Equal opportunity / diversity fields: answer "Prefer not to say" for optional demographic questions.
-- Education: fill from qualification, university, graduationYear fields.
-- Work experience: fill from organization, jobTitle, experience fields.
-`
-  };
-
-  if (u.includes("internshala.com")) return {
-    name: "Internshala",
-    hints: `
-PLATFORM: Internshala
-- "Why should we hire you?" / cover letter: use bio from profile.
-- Skills: select or type each skill from the profile skills list.
-- Availability / start date: answer "Immediately" or current month.
-- College name: type and select from autocomplete suggestions.
-- Graduation year: use graduationYear from profile.
-- Resume: upload if a file upload is present.
-`
-  };
-
-  if (u.includes("hackerearth.com")) return {
-    name: "HackerEarth",
-    hints: `
-PLATFORM: HackerEarth
-- Team name and size: use teamName and teamSize from profile.
-- Project idea: use projectName + projectDescription.
-- Technology tags: select from skills/techStack in profile.
-- GitHub link: use github from profile.
-- Problem statement selection: pick any available problem statement.
-- Accept terms and conditions.
-`
-  };
-
-  if (u.includes("hackerrank.com")) return {
-    name: "HackerRank",
-    hints: `
-PLATFORM: HackerRank
-- Fill name, email from profile.
-- LinkedIn / GitHub links from profile.
-- Skills/technologies: select from profile skills.
-`
-  };
-
-  return {
-    name: "Generic Web Form",
-    hints: `
-PLATFORM: Unknown / Generic Web Form
-- Intelligently map profile fields to whatever form fields are visible.
-- Use the bio for any open-ended "about yourself" or "describe yourself" text areas.
-- For team hackathon fields use the team section of the profile.
-- For job fields use the professional section.
-`
-  };
-}
-
-/* ══════════════════════════════════════════════════════
-   GOAL BUILDER
-══════════════════════════════════════════════════════ */
-function buildGoal(url, profile, extraFields = {}, otpValue = "") {
-  const fullName = `${profile.firstName || ""} ${profile.lastName || ""}`.trim() || profile.name || "";
-  const platform = detectPlatform(url);
-  const merged = { ...profile, ...extraFields };
-
-  const backendUrl = process.env.BACKEND_URL || "http://localhost:5000";
-  const otpSection = otpValue ? `
-## OTP / VERIFICATION CODE
-The user has provided the following OTP/verification code: ${otpValue}
-If the page is showing an OTP input field, type this code into the OTP/verification field and click Verify/Confirm/Submit.
-` : sessionId ? `
-## OTP HANDLING RULE — VERY IMPORTANT
-If at any point you see an OTP input field, a "Enter verification code" screen, or any screen asking for a code sent via SMS or email:
-1. DO NOT guess or make up a code.
-2. Make a GET request to: ${backendUrl}/api/agent/get-otp?sessionId=${sessionId}
-   - If the response is {"otp": "<code>"} — type that code into the OTP field and click Verify.
-   - If the response is {"waiting": true} — wait 5 seconds and try again (poll up to 24 times = 2 minutes).
-3. The user will type their OTP into the app while you wait.
-` : `
-## OTP HANDLING RULE
-If you encounter an OTP/verification screen, stop and report it. Do not guess codes.
-`;
-
-  return `
-You are an expert form-filling AI agent specialised in completing web registrations, job applications, hackathon sign-ups, and all kinds of online forms quickly and accurately.
-
-## TARGET
-URL: ${url}
-Platform detected: ${platform.name}
-
-## COMPLETE USER PROFILE
-Use this data to fill every matching field on the page:
-
-### Identity
-- Full Name: ${fullName}
-- First Name: ${merged.firstName || ""}
-- Last Name: ${merged.lastName || ""}
-- Email: ${merged.email || ""}
-- Contact / Phone: ${merged.phone || ""}
-- Date of Birth: ${merged.dob || ""}
-- Gender: ${merged.gender || ""}
-
-### Address
-- Address Line 1: ${merged.address1 || ""}
-- City: ${merged.city || ""}
-- State / Province: ${merged.state || ""}
-- PIN / ZIP: ${merged.pincode || ""}
-- Country: ${merged.country || "India"}
-- Nationality: ${merged.nationality || "Indian"}
-
-### Education
-- Highest Qualification: ${merged.qualification || ""}
-- Branch / Field of Study: ${merged.fieldOfStudy || ""}
-- University / College: ${merged.university || ""}
-- Graduation Year: ${merged.graduationYear || ""}
-- CGPA / Percentage: ${merged.cgpa || ""}
-- 10th Percentage: ${merged.tenthPercent || ""}
-- 12th Percentage: ${merged.twelfthPercent || ""}
-
-### Professional / Job
-- Current Company / Organisation: ${merged.organization || ""}
-- Job Title / Designation: ${merged.jobTitle || ""}
-- Total Experience (years): ${merged.experience || ""}
-- Industry: ${merged.industry || ""}
-- Skills (comma-separated): ${merged.skills || ""}
-- Current CTC: ${merged.ctc || ""}
-- Expected CTC: ${merged.expectedCtc || ""}
-- Notice Period: ${merged.noticePeriod || ""}
-- Certifications: ${merged.certifications || ""}
-
-### Social & Links
-- LinkedIn URL: ${merged.linkedin || ""}
-- GitHub URL: ${merged.github || ""}
-- Portfolio / Website: ${merged.portfolio || ""}
-- Twitter / X: ${merged.twitter || ""}
-- LeetCode / CF: ${merged.leetcode || ""}
-- Instagram: ${merged.instagram || ""}
-
-### Hackathon / Event
-- Team Name: ${merged.teamName || ""}
-- Team Size: ${merged.teamSize || ""}
-- Your Role in Team: ${merged.teamRole || ""}
-- Project / Idea Name: ${merged.projectName || ""}
-- Project Description: ${merged.projectDescription || ""}
-- Tech Stack: ${merged.techStack || merged.skills || ""}
-- Project GitHub Repo: ${merged.githubRepo || merged.github || ""}
-- Demo / Live URL: ${merged.demoLink || ""}
-- Past Achievements / Awards: ${merged.achievements || ""}
-
-### Documents
-- Resume / CV URL: ${merged.resumeURL || ""}
-- College Photo ID URL: ${merged.collegePhotoURL || ""}
-
-### Bio & Cover Letter
-- Bio / About Me / SOP: ${merged.bio || ""}
-- Why join us / Why interested: ${merged.whyUs || ""}
-- Key Strengths: ${merged.strengths || ""}
-- Hobbies / Interests: ${merged.hobbies || ""}
-- Additional Message: ${merged.message || ""}
-
-${Object.keys(extraFields).length > 0 ? `### Extra Fields Provided by User\n${Object.entries(extraFields).map(([k,v]) => `- ${k}: ${v}`).join("\n")}` : ""}
-
-${otpSection}
-## PLATFORM-SPECIFIC INSTRUCTIONS
-${platform.hints}
-
-## UNIVERSAL FILLING RULES
-1. Navigate to the URL and wait for the page to fully load. Dismiss cookie banners / popups.
-2. Scan ALL visible form fields: inputs, textareas, dropdowns, radio buttons, checkboxes, date pickers, file upload buttons, tag selectors, etc.
-3. For each field, match to the best profile value using the field label, placeholder, and context.
-4. As you work through the form, track every field you encounter.
-
-## CRITICAL REPORTING REQUIREMENT — READ THIS CAREFULLY
-After scanning and filling the form (but BEFORE submitting), you MUST emit TWO reports:
-
-### Report A — Fields you COULD NOT fill (SKIPPED_FIELDS)
-For every field on the page that you left blank (either because the profile had no matching data, or it was a custom question unique to this form), emit this EXACT JSON on its own line:
-SKIPPED_FIELDS:{"fields":[{"label":"<exact question/label from the page>","type":"<text|email|tel|textarea|select|radio|checkbox|file>","required":<true|false>,"reason":"<why skipped: no profile data / custom question / file upload needed / etc>"}]}
-
-Include ALL skipped fields — both required and optional ones. If you filled everything, emit: SKIPPED_FIELDS:{"fields":[]}
-
-### Report B — Fields you could NOT fill that need user input (NEEDS_INPUT)
-For fields that are REQUIRED and you could NOT fill, also emit:
-NEEDS_INPUT:{"fields":[{"label":"<field label>","type":"<text|email|tel|select|textarea>","required":true}]}
-
-5. After both reports, continue to:
-   - Scroll the page to catch any fields below the fold.
-   - Accept all terms/privacy/consent checkboxes.
-   - Click Submit / Apply / Register / Join / Participate / Next.
-   - Wait for a success/confirmation screen.
-6. Report each action you take as a short sentence.
-
-## IMPORTANT RULES
-- Emit SKIPPED_FIELDS with ALL skipped fields — this is the most important output.
-- Emit NEEDS_INPUT only for fields that are required AND have no profile match.
-- Only report fields ACTUALLY on this specific page.
-- Do not refresh the page mid-fill.
-- If a CAPTCHA is encountered, report it and pause.
-- If a login/signup wall blocks access, report it immediately.
-- Use the bio/message as fallback for any open-ended text fields.
-`.trim();
-}
-
-/* ══════════════════════════════════════════════════════
-   OTP WAIT STORE
-   When agent hits an OTP screen:
-     1. server stores a Promise resolver keyed by sessionId
-     2. frontend calls POST /api/agent/submit-otp with { sessionId, otp }
-     3. server resolves the promise → agent goal gets the code and types it
-══════════════════════════════════════════════════════ */
+/* ── OTP wait store (shared with routes) ── */
 export const otpWaiters = new Map();
-// Map<sessionId, { resolve: (otp: string) => void, createdAt: number }>
 
 export function waitForOtp(sessionId, timeoutMs = 120_000) {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       otpWaiters.delete(sessionId);
-      reject(new Error("OTP timeout — user did not enter code within 2 minutes."));
+      reject(new Error("OTP timeout"));
     }, timeoutMs);
-
     otpWaiters.set(sessionId, {
-      resolve: (otp) => {
-        clearTimeout(timer);
-        otpWaiters.delete(sessionId);
-        resolve(otp);
-      },
+      resolve: (otp) => { clearTimeout(timer); otpWaiters.delete(sessionId); resolve(otp); },
       createdAt: Date.now(),
     });
   });
 }
 
 /* ══════════════════════════════════════════════════════
-   STREAM AGENT
+   FIELD MAP
+══════════════════════════════════════════════════════ */
+const FIELD_MAP = [
+  // ── Identity ──
+  { keys: ["firstname", "first_name", "first name", "fname", "given name", "given_name"],          profile: "firstName"              },
+  { keys: ["lastname", "last_name", "last name", "lname", "surname", "family name"],               profile: "lastName"               },
+  { keys: ["fullname", "full_name", "full name", "your name", "participant name", "name"],         profile: "name"                   },
+  { keys: ["email", "e-mail", "mail", "email address", "emailaddress"],                            profile: "email"                  },
+  { keys: ["phone", "mobile", "contact", "phonenumber", "phone_number", "mobile number",
+            "contact number", "whatsapp"],                                                          profile: "phone"                  },
+  { keys: ["dob", "date of birth", "birth date", "birthday", "dateofbirth"],                      profile: "dob"                    },
+  { keys: ["gender", "sex"],                                                                       profile: "gender"                 },
+
+  // ── Address ──
+  { keys: ["address", "address1", "street", "street address", "house"],                           profile: "address1"               },
+  { keys: ["address2", "apartment", "suite", "flat"],                                              profile: "address2"               },
+  { keys: ["city", "town", "district"],                                                            profile: "city"                   },
+  { keys: ["state", "province", "region"],                                                         profile: "state"                  },
+  { keys: ["pincode", "zip", "postal", "zipcode", "postalcode", "pin"],                           profile: "pincode"                },
+  { keys: ["country"],                                                                             profile: "country"                },
+
+  // ── Education ──
+  { keys: ["college", "university", "institution", "school", "collegename", "university name",
+            "institute", "college name"],                                                           profile: "collegeName"            },
+  { keys: ["degree", "qualification", "program", "course", "branch", "degreename",
+            "degree name", "stream"],                                                               profile: "degreeName"             },
+  { keys: ["year", "current year", "study year", "yearofstudy", "year of study",
+            "semester", "sem"],                                                                     profile: "year"                   },
+  { keys: ["graduation", "graduationyear", "passing year", "passout", "passoutyear",
+            "expected graduation", "graduating year"],                                              profile: "expectedGraduationYear" },
+  { keys: ["rollno", "roll", "rollnumber", "roll number", "student id", "enrollment",
+            "registrationnumber", "reg no"],                                                        profile: "rollNumber"             },
+  { keys: ["cgpa", "gpa", "percentage", "marks", "score", "aggregate"],                           profile: "cgpa"                   },
+
+  // ── Professional ──
+  { keys: ["organization", "org", "company", "employer", "workplace", "company name"],            profile: "organization"           },
+  { keys: ["jobtitle", "job title", "designation", "role", "position"],                           profile: "jobTitle"               },
+  { keys: ["experience", "work experience", "years of experience", "exp"],                        profile: "experience"             },
+  { keys: ["skills", "technical skills", "technologies", "tech stack", "expertise",
+            "skillset", "skill set"],                                                               profile: "skills"                 },
+  { keys: ["ctc", "current ctc", "current salary", "salary"],                                     profile: "ctc"                    },
+  { keys: ["expectedctc", "expected ctc", "expected salary"],                                     profile: "expectedCtc"            },
+  { keys: ["notice", "notice period", "noticeperiod", "availability"],                            profile: "noticePeriod"           },
+
+  // ── Social / Links ──
+  { keys: ["linkedin", "linkedin url", "linkedin profile"],                                        profile: "linkedin"               },
+  { keys: ["github", "github url", "github profile", "github link"],                              profile: "github"                 },
+  { keys: ["portfolio", "website", "personal website", "portfolio url"],                          profile: "portfolio"              },
+  { keys: ["twitter", "twitter handle", "twitter url"],                                           profile: "twitter"                },
+  { keys: ["leetcode", "leetcode url", "leetcode profile"],                                       profile: "leetcode"               },
+
+  // ── Hackathon / Team ──
+  { keys: ["teamname", "team name", "team"],                                                      profile: "teamName"               },
+  { keys: ["teamsize", "team size", "members", "no of members"],                                  profile: "teamSize"               },
+  { keys: ["teamrole", "team role", "your role", "role in team"],                                 profile: "teamRole"               },
+  { keys: ["projectname", "project name", "project title"],                                       profile: "projectName"            },
+  { keys: ["projectdescription", "project description", "project idea", "idea",
+            "project abstract", "abstract"],                                                        profile: "projectDescription"     },
+  { keys: ["githublink", "github repo", "repo link", "repository", "repo url",
+            "github repository"],                                                                   profile: "github"                 },
+  { keys: ["demolink", "demo link", "demo url", "live link", "deployed link"],                    profile: "demoLink"               },
+  { keys: ["achievements", "achievement", "awards"],                                              profile: "achievements"           },
+
+  // ── Documents ──
+  { keys: ["resume", "cv", "resume url", "resume link", "resumeurl"],                            profile: "resumeURL"              },
+
+  // ── Bio / Long text ──
+  { keys: ["bio", "about", "about you", "about yourself", "introduction", "intro",
+            "tell us about yourself"],                                                              profile: "bio"                    },
+  { keys: ["whyus", "why us", "why do you want", "motivation", "why join",
+            "why hackathon", "why participate"],                                                    profile: "whyUs"                  },
+  { keys: ["strengths", "strength", "your strengths"],                                            profile: "strengths"              },
+  { keys: ["hobbies", "hobby", "interests", "interest"],                                          profile: "hobbies"                },
+  { keys: ["message", "additional info", "anything else", "comments", "remarks",
+            "other details"],                                                                       profile: "message"                },
+];
+
+/* ══════════════════════════════════════════════════════
+   SUCCESS DETECTOR
+══════════════════════════════════════════════════════ */
+const SUCCESS_KEYWORDS = [
+  "successfully registered", "registration successful", "you are registered",
+  "application submitted", "submission successful", "thank you for registering",
+  "thank you for applying", "you have been registered", "registration complete",
+  "successfully applied", "application received", "we received your",
+  "you're in!", "you are in!", "spot confirmed", "see you at",
+  "registration confirmed", "confirmed your registration",
+];
+
+async function isSuccessPage(page) {
+  try {
+    const text = (await page.evaluate(() => document.body.innerText)).toLowerCase();
+    return SUCCESS_KEYWORDS.find(k => text.includes(k)) || null;
+  } catch { return null; }
+}
+
+/* ══════════════════════════════════════════════════════
+   FIND PROFILE VALUE FOR A FIELD ELEMENT
+══════════════════════════════════════════════════════ */
+function findProfileValue(hints, profile) {
+  for (const entry of FIELD_MAP) {
+    for (const keyword of entry.keys) {
+      for (const hint of hints) {
+        if (hint.includes(keyword) || keyword.includes(hint)) {
+          const val = profile[entry.profile];
+          if (val && String(val).trim()) return String(val).trim();
+        }
+      }
+    }
+  }
+  return null;
+}
+
+/* ══════════════════════════════════════════════════════
+   EXTRACT FIELD HINTS FROM AN ELEMENT
+══════════════════════════════════════════════════════ */
+async function getFieldHints(page, el) {
+  return page.evaluate((el) => {
+    const hints = [];
+    const add = (v) => { if (v) hints.push(v.toLowerCase().trim()); };
+
+    add(el.name);
+    add(el.id);
+    add(el.placeholder);
+    add(el.getAttribute("aria-label"));
+    add(el.getAttribute("data-label"));
+    add(el.getAttribute("title"));
+
+    if (el.id) {
+      const lbl = document.querySelector(`label[for="${el.id}"]`);
+      if (lbl) add(lbl.innerText);
+    }
+    const parent = el.closest("label");
+    if (parent) add(parent.innerText);
+
+    const wrap = el.closest("div, fieldset, li");
+    if (wrap) {
+      const lbl = wrap.querySelector("label");
+      if (lbl) add(lbl.innerText);
+      const prev = el.previousElementSibling;
+      if (prev && ["LABEL","SPAN","P","LEGEND"].includes(prev.tagName)) add(prev.innerText);
+    }
+
+    return [...new Set(hints)];
+  }, el);
+}
+
+/* ══════════════════════════════════════════════════════
+   FILL ONE PAGE PASS
+   Returns { filled, skipped }
+══════════════════════════════════════════════════════ */
+async function fillPageFields(page, profile, send) {
+  let filled = 0, skipped = 0;
+
+  // ── Text inputs & textareas ──
+  const inputs = await page.$$(
+    "input:not([type='hidden']):not([type='submit']):not([type='button'])" +
+    ":not([type='checkbox']):not([type='radio']):not([type='file']), textarea"
+  );
+
+  for (const el of inputs) {
+    try {
+      const visible = await el.isVisible();
+      if (!visible) continue;
+
+      const hints = await getFieldHints(page, el);
+      const value = findProfileValue(hints, profile);
+      if (!value) { skipped++; continue; }
+
+      await el.scrollIntoViewIfNeeded();
+      await el.fill(value);
+      await page.waitForTimeout(120);
+      filled++;
+      send("message", { message: `✏️ Filled: "${hints[0] || "field"}" → ${value.slice(0, 40)}${value.length > 40 ? "…" : ""}` });
+    } catch { /* skip uninteractable */ }
+  }
+
+  // ── Select dropdowns ──
+  const selects = await page.$$("select");
+  for (const el of selects) {
+    try {
+      const visible = await el.isVisible();
+      if (!visible) continue;
+
+      const hints = await getFieldHints(page, el);
+      const value = findProfileValue(hints, profile);
+      if (!value) { skipped++; continue; }
+
+      await el.scrollIntoViewIfNeeded();
+      try { await el.selectOption({ label: new RegExp(value.slice(0, 8), "i") }); }
+      catch {
+        try { await el.selectOption({ value }); }
+        catch { try { await el.selectOption({ label: value }); } catch { skipped++; continue; } }
+      }
+      await page.waitForTimeout(120);
+      filled++;
+      send("message", { message: `📋 Selected: "${hints[0] || "dropdown"}" → ${value.slice(0, 40)}` });
+    } catch { /* skip */ }
+  }
+
+  // ── Checkboxes (terms, consent, etc.) ──
+  const checkboxes = await page.$$("input[type='checkbox']");
+  for (const el of checkboxes) {
+    try {
+      const visible = await el.isVisible();
+      if (!visible) continue;
+      const checked = await el.isChecked();
+      if (checked) continue;
+
+      const hints = await getFieldHints(page, el);
+      const combined = hints.join(" ");
+      const autoCheck = ["terms", "condition", "privacy", "policy", "agree", "consent",
+                         "accept", "certify", "confirm", "acknowledge", "newsletter",
+                         "code of conduct", "mlh", "18", "above"];
+      if (autoCheck.some(k => combined.includes(k))) {
+        await el.scrollIntoViewIfNeeded();
+        await el.check();
+        await page.waitForTimeout(100);
+        filled++;
+        send("message", { message: `☑️ Checked: "${hints[0] || "checkbox"}"` });
+      }
+    } catch { /* skip */ }
+  }
+
+  return { filled, skipped };
+}
+
+/* ══════════════════════════════════════════════════════
+   GET VISIBLE FORM INPUT COUNT
+   Used to detect real page/step changes
+══════════════════════════════════════════════════════ */
+async function getVisibleInputCount(page) {
+  try {
+    return await page.evaluate(() =>
+      document.querySelectorAll(
+        "input:not([type='hidden']):not([type='submit']):not([type='button']), textarea, select"
+      ).length
+    );
+  } catch { return 0; }
+}
+
+/* ══════════════════════════════════════════════════════
+   FIND SUBMIT OR NEXT BUTTON
+   ─────────────────────────────────────────────────────
+   Key improvement: only matches buttons that are INSIDE
+   a <form> or near form fields, not navbar/header links.
+   Returns { el, type: "submit" | "next" } | null
+══════════════════════════════════════════════════════ */
+async function findActionButton(page) {
+  const SUBMIT_TEXTS = ["submit", "register", "apply now", "apply", "join now", "join", "sign up", "signup", "finish", "complete"];
+  const NEXT_TEXTS   = ["next", "continue", "proceed", "save & continue", "save and continue", "next step", "go to next"];
+
+  // Evaluate in-browser: find all visible buttons sorted by proximity to form fields
+  const result = await page.evaluate((submitTexts, nextTexts) => {
+    const allButtons = [
+      ...document.querySelectorAll("button, input[type='submit']")
+    ];
+
+    const visible = allButtons.filter(btn => {
+      const r = btn.getBoundingClientRect();
+      // Must be visible and have non-zero size
+      if (r.width === 0 || r.height === 0) return false;
+      // Must not be in a header or nav
+      if (btn.closest("header, nav, [role='navigation'], .navbar, .nav, .header, .topbar")) return false;
+      // Must not be disabled
+      if (btn.disabled) return false;
+      return true;
+    });
+
+    // Score each button: submit > next, prefer inside form, prefer lower on page
+    let bestSubmit = null, bestNext = null;
+
+    for (const btn of visible) {
+      const rawText = (btn.innerText || btn.value || btn.getAttribute("aria-label") || "").toLowerCase().trim();
+      const inForm = !!btn.closest("form");
+      const rect = btn.getBoundingClientRect();
+      const score = (inForm ? 1000 : 0) + rect.top; // lower top = earlier in page
+
+      if (submitTexts.some(s => rawText.includes(s))) {
+        if (!bestSubmit || score < bestSubmit.score) {
+          bestSubmit = { text: rawText, score, inForm, selector: null };
+          // Build a unique selector
+          if (btn.id) bestSubmit.selector = `#${btn.id}`;
+          else if (btn.name) bestSubmit.selector = `[name="${btn.name}"]`;
+          else bestSubmit.index = [...document.querySelectorAll("button, input[type='submit']")].indexOf(btn);
+        }
+      } else if (nextTexts.some(s => rawText.includes(s))) {
+        if (!bestNext || score < bestNext.score) {
+          bestNext = { text: rawText, score, inForm, selector: null };
+          if (btn.id) bestNext.selector = `#${btn.id}`;
+          else if (btn.name) bestNext.selector = `[name="${btn.name}"]`;
+          else bestNext.index = [...document.querySelectorAll("button, input[type='submit']")].indexOf(btn);
+        }
+      }
+    }
+
+    return { submit: bestSubmit, next: bestNext };
+  }, SUBMIT_TEXTS, NEXT_TEXTS);
+
+  // Resolve to actual element
+  const resolve = async (info, type) => {
+    if (!info) return null;
+    try {
+      let el;
+      if (info.selector) {
+        el = await page.$(info.selector);
+      } else if (info.index !== undefined) {
+        const all = await page.$$("button, input[type='submit']");
+        el = all[info.index];
+      }
+      if (el && await el.isVisible()) return { el, type };
+    } catch { /* ignore */ }
+    return null;
+  };
+
+  // Always prefer submit over next
+  return (await resolve(result.submit, "submit")) || (await resolve(result.next, "next")) || null;
+}
+
+/* ══════════════════════════════════════════════════════
+   WAIT FOR PAGE/DOM CHANGE AFTER BUTTON CLICK
+   Works for both full navigations and SPA step changes
+══════════════════════════════════════════════════════ */
+async function waitForChange(page, prevUrl, prevInputCount) {
+  // Try waiting for navigation first (real page load)
+  try {
+    await page.waitForNavigation({ timeout: 3000, waitUntil: "domcontentloaded" });
+    return "navigation";
+  } catch { /* no navigation, probably SPA */ }
+
+  // Wait up to 2s for input count to change (SPA showing next step)
+  const deadline = Date.now() + 2000;
+  while (Date.now() < deadline) {
+    await page.waitForTimeout(200);
+    const count = await getVisibleInputCount(page);
+    if (count !== prevInputCount) return "spa-step";
+  }
+
+  // No change detected — still same step or error
+  const newUrl = page.url();
+  if (newUrl !== prevUrl) return "navigation";
+  return "no-change";
+}
+
+/* ══════════════════════════════════════════════════════
+   MAIN STREAM AGENT
 ══════════════════════════════════════════════════════ */
 export const streamAgent = async (url, profile, extraFields, res, otpValue = "", sessionId = "") => {
   const send = (event, data) => {
-    res.write(`event: ${event}\n`);
-    res.write(`data: ${JSON.stringify(data)}\n\n`);
+    try {
+      res.write(`event: ${event}\n`);
+      res.write(`data: ${JSON.stringify(data)}\n\n`);
+    } catch { /* client disconnected */ }
   };
 
+  const merged = {
+    ...profile,
+    ...extraFields,
+    name: `${profile.firstName || ""} ${profile.lastName || ""}`.trim(),
+  };
+
+  send("message", { message: "🌐 Starting browser…" });
+
+  let browser = null;
+
   try {
-    const response = await axios.post(
-      "https://agent.tinyfish.ai/v1/automation/run-sse",
-      {
-        url,
-        goal: buildGoal(url, profile, extraFields, otpValue),
-        browser_profile: "stealth",   // needed for bot-protected sites like Unstop
-      },
-      {
-        headers: {
-          "X-API-Key": process.env.TINYFISH_API_KEY,
-          "Content-Type": "application/json",
-        },
-        responseType: "stream",
-        timeout: 300_000,
+    browser = await chromium.launch({
+      headless: true,
+      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-blink-features=AutomationControlled"],
+    });
+
+    const context = await browser.newContext({
+      userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36",
+      viewport: { width: 1280, height: 800 },
+    });
+    const page = await context.newPage();
+
+    send("message", { message: `🔗 Opening ${url}…` });
+    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30_000 });
+    await page.waitForTimeout(1800);
+    send("message", { message: "✅ Page loaded — scanning form fields…" });
+
+    const MAX_STEPS = 15;
+    let stepNum     = 0;
+    let totalFilled = 0;
+    let noProgressCount = 0; // consecutive steps with 0 filled + no page change
+
+    while (stepNum < MAX_STEPS) {
+      stepNum++;
+
+      // ── Success check ──
+      const successSignal = await isSuccessPage(page);
+      if (successSignal) {
+        send("done", { success: true, confirmed: true, message: `✅ ${successSignal}` });
+        res.end();
+        await browser.close();
+        return;
       }
-    );
 
-    let buffer = "";
+      // ── Snapshot before filling ──
+      const urlBefore        = page.url();
+      const inputsBefore     = await getVisibleInputCount(page);
 
-    response.data.on("data", (chunk) => {
-      buffer += chunk.toString();
-      const lines = buffer.split("\n");
-      buffer = lines.pop();
+      // ── Fill fields ──
+      send("message", { message: `📄 Step ${stepNum}: filling fields…` });
+      const { filled, skipped } = await fillPageFields(page, merged, send);
+      totalFilled += filled;
+      send("message", { message: `✅ Step ${stepNum} complete — ${filled} filled, ${skipped} unmatched` });
 
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed.startsWith("data:")) continue;
+      await page.waitForTimeout(400);
 
-        const raw = trimmed.replace(/^data:\s*/, "");
-        if (!raw || raw === "[DONE]") continue;
+      // ── OTP check ──
+      const pageText = (await page.evaluate(() => document.body.innerText).catch(() => "")).toLowerCase();
+      if (pageText.includes("otp") || pageText.includes("verification code") || pageText.includes("one-time")) {
+        send("message", { message: "🔐 OTP screen detected — waiting for code…" });
+        const sessionSendFn = otpWaiters.get(`__send_${sessionId}`);
+        if (sessionSendFn) sessionSendFn({ event: "otp_required", data: { hint: "Enter the OTP sent to your phone/email.", sessionId } });
 
         try {
-          const evt = JSON.parse(raw);
-          const evtType   = (evt.type   || "").toUpperCase();
-          const evtStatus = (evt.status || "").toUpperCase();
-
-          // ── Streaming URL ── forward it so UI can show live browser feed
-          if (evtType === "STREAMING_URL" && evt.streamingUrl) {
-            send("streaming_url", { url: evt.streamingUrl });
-            continue;
+          const otp = otpValue || await waitForOtp(sessionId, 120_000);
+          const otpInput = await page.$([
+            "input[type='number']", "input[name*='otp']", "input[id*='otp']",
+            "input[placeholder*='OTP']", "input[placeholder*='code']",
+            "input[autocomplete='one-time-code']",
+          ].join(", "));
+          if (otpInput) {
+            await otpInput.fill(otp);
+            await page.keyboard.press("Enter");
+            send("message", { message: "✅ OTP submitted — continuing…" });
+            await page.waitForTimeout(2000);
           }
-
-          // ── THE ONLY REAL DONE: type=COMPLETE AND status=COMPLETED ──
-          if (evtType === "COMPLETE" && evtStatus === "COMPLETED") {
-            const result = evt.resultJson || {};
-
-            // Parse any skipped/needs fields from resultJson if agent embedded them
-            if (result.skipped_fields) send("skipped_fields", { fields: result.skipped_fields });
-            if (result.needs_input)    send("needs_input",    { fields: result.needs_input    });
-
-            // Check resultJson for confirmation signals
-            const resultStr = JSON.stringify(result).toLowerCase();
-            const confirmed = [
-              /registered/i, /submitted/i, /confirmation/i, /success/i, /you.{0,20}in/i,
-            ].some(r => r.test(resultStr));
-
-            send("done", {
-              success: true,
-              confirmed,
-              message: confirmed
-                ? "✅ Registration confirmed!"
-                : "Agent completed. Please check the form page to verify submission.",
-              result,
-            });
-            res.end();
-            return;
-          }
-
-          // ── PROGRESS events — forward as messages to show in live console ──
-          if (evtType === "PROGRESS" || evtType === "STARTED") {
-            const progressText = evt.purpose || evt.message || evt.log || JSON.stringify(evt);
-
-            // Detect SKIPPED_FIELDS embedded in progress text
-            const sfMatch = progressText.match(/SKIPPED_FIELDS:(\{[\s\S]*?\})/);
-            if (sfMatch) {
-              try {
-                const p = JSON.parse(sfMatch[1]);
-                if (p.fields) send("skipped_fields", { fields: p.fields });
-              } catch { /* malformed */ }
-            }
-
-            // Detect NEEDS_INPUT embedded in progress text
-            const niMatch = progressText.match(/NEEDS_INPUT:(\{[\s\S]*?\})/);
-            if (niMatch) {
-              try {
-                const p = JSON.parse(niMatch[1]);
-                if (p.fields?.length) send("needs_input", { fields: p.fields });
-              } catch { /* malformed */ }
-            }
-
-            send("message", { message: progressText, raw: evt });
-            continue;
-          }
-
-          // ── ERROR from TinyFish ──
-          if (evtType === "ERROR" || evtType === "FAILED") {
-            send("error", { message: evt.message || evt.error || "Agent encountered an error." });
-            res.end();
-            return;
-          }
-
-          // ── Any other event type — forward as a plain message ──
-          send("message", { message: evt.purpose || evt.message || JSON.stringify(evt), raw: evt });
-
         } catch {
-          // Raw non-JSON line — forward as log
-          if (raw.trim()) send("log", { message: raw });
+          send("message", { message: "⚠️ OTP timeout — continuing…" });
         }
+        noProgressCount = 0;
+        continue;
       }
+
+      // ── Find and click the right button ──
+      const btn = await findActionButton(page);
+
+      if (!btn) {
+        // No action button found at all
+        if (totalFilled > 0) {
+          send("done", {
+            success: true, confirmed: false,
+            message: `⚠️ Filled ${totalFilled} field(s) but no submit button found. Please submit manually.`,
+          });
+        } else {
+          send("done", {
+            success: false, confirmed: false,
+            message: "⚠️ No fillable fields and no submit button found. The form may require login or a manual step.",
+          });
+        }
+        res.end();
+        await browser.close();
+        return;
+      }
+
+      send("message", { message: btn.type === "submit" ? "🚀 Clicking Submit…" : `➡️ Clicking Next…` });
+      const urlAtClick    = page.url();
+      const inputsAtClick = await getVisibleInputCount(page);
+
+      await btn.el.scrollIntoViewIfNeeded();
+      await btn.el.click();
+
+      // Wait for page/step change
+      const changeType = await waitForChange(page, urlAtClick, inputsAtClick);
+      send("message", { message: `🔀 Change detected: ${changeType}` });
+
+      if (btn.type === "submit") {
+        // After submit, wait a moment then check for success
+        await page.waitForTimeout(1500);
+        const signal = await isSuccessPage(page);
+        send("done", {
+          success: true,
+          confirmed: !!signal,
+          message: signal
+            ? `✅ ${signal}`
+            : `⚠️ Form submitted (${totalFilled} fields filled). Please verify the page to confirm.`,
+        });
+        res.end();
+        await browser.close();
+        return;
+      }
+
+      // For "next" clicks — check if anything actually changed
+      const urlAfter    = page.url();
+      const inputsAfter = await getVisibleInputCount(page);
+      const realChange  = (urlAfter !== urlAtClick) || (inputsAfter !== inputsAtClick);
+
+      if (!realChange) {
+        noProgressCount++;
+        send("message", { message: `⚠️ No page change after click (attempt ${noProgressCount})` });
+
+        if (noProgressCount >= 3) {
+          // Stuck — likely all fields filled, just no submit button visible
+          // Try scrolling down to reveal it
+          await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+          await page.waitForTimeout(800);
+          const btnAfterScroll = await findActionButton(page);
+          if (btnAfterScroll?.type === "submit") {
+            send("message", { message: "🚀 Found Submit after scroll — clicking…" });
+            await btnAfterScroll.el.click();
+            await page.waitForTimeout(1500);
+            const signal = await isSuccessPage(page);
+            send("done", {
+              success: true, confirmed: !!signal,
+              message: signal ? `✅ ${signal}` : `⚠️ Submitted. Please verify the page.`,
+            });
+          } else {
+            send("done", {
+              success: totalFilled > 0, confirmed: false,
+              message: `⚠️ Filled ${totalFilled} field(s). Form appears stuck — please complete submission manually.`,
+            });
+          }
+          res.end();
+          await browser.close();
+          return;
+        }
+      } else {
+        noProgressCount = 0; // reset on real progress
+      }
+    }
+
+    // Exceeded max steps — shouldn't normally reach here
+    send("done", {
+      success: totalFilled > 0, confirmed: false,
+      message: `⚠️ Filled ${totalFilled} field(s) across ${stepNum} steps. Please verify and submit the remaining steps manually.`,
     });
-
-    response.data.on("end", () => {
-      // Stream ended without a COMPLETE event — warn user
-      send("done", { success: false, confirmed: false, message: "⚠️ Agent stream ended without confirmation. Please check the form page manually." });
-      res.end();
-    });
-
-    response.data.on("error", (err) => {
-      console.error("TinyFish stream error:", err.message);
-      send("error", { message: "Stream error: " + err.message });
-      res.end();
-    });
-
-  } catch (error) {
-    const msg =
-      error.response?.data
-        ? typeof error.response.data === "string"
-          ? error.response.data.slice(0, 400)
-          : JSON.stringify(error.response.data).slice(0, 400)
-        : error.message;
-
-    console.error("TinyFish Error:", msg);
-    send("error", { message: msg });
     res.end();
+
+  } catch (err) {
+    console.error("[Agent] Fatal:", err.message);
+    send("error", { message: "Agent crashed: " + err.message });
+    res.end();
+  } finally {
+    if (browser) { try { await browser.close(); } catch { } }
   }
 };

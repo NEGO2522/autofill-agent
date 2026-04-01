@@ -1,9 +1,15 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
 import agentRoutes from "./routes/agent.routes.js";
 
-dotenv.config();
+const __dirname = dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: join(__dirname, ".env") });
+
+// Startup diagnostics
+console.log("[boot] AutoSlay Autofill Server ready — no AI required");
 
 const app = express();
 

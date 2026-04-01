@@ -2,11 +2,11 @@ import crypto from "crypto";
 import { streamAgent, otpWaiters, waitForOtp } from "../services/tinyfish.service.js";
 
 /**
- * SSE endpoint — streams TinyFish agent progress to the browser in real time.
+ * SSE endpoint — streams autofill progress to the browser in real time.
  * GET /api/agent/run-stream?url=...&email=...&firstName=...&...
  *
- * Accepts the full profile from the new Form (personal, team, job, social, documents).
- * Also accepts extraFields — a JSON-encoded object of mid-run user-typed values.
+ * Accepts the full profile saved from Form.jsx.
+ * Also accepts extraFields — a JSON-encoded object of extra values.
  */
 export const runAgentStream = async (req, res) => {
   const q = req.query;
