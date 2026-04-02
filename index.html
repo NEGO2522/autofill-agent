@@ -23,7 +23,8 @@
       /* ── Chrome Extension popup: fix dimensions ──
          Chrome sets the popup width/height from the content.
          We set the popup body to exactly 360px wide so it renders
-         cleanly without scrollbars or weird sizing.                */
+         cleanly without scrollbars or weird sizing.
+      */
       body.is-extension {
         width: 360px;
         min-height: 480px;
@@ -33,12 +34,7 @@
   </head>
   <body>
     <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-    <script>
-      /* Mark extension context so CSS can target it */
-      if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.id) {
-        document.body.classList.add("is-extension");
-      }
-    </script>
+    <!-- External script: avoids CSP inline-script violation in MV3 extensions -->
+    <script src="/init.js"></script>
   </body>
 </html>
