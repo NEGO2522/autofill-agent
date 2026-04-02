@@ -25,6 +25,8 @@ function App() {
       <AuthProvider>
         <HashRouter>
           <Routes>
+            <Route path="/" element={<ExtensionPopup />} />
+            <Route path="/privacy" element={<Privacy />} />
             <Route path="*" element={<ExtensionPopup />} />
           </Routes>
         </HashRouter>
