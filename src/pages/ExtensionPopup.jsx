@@ -813,6 +813,32 @@ export default function ExtensionPopup() {
 
           <div style={{ flex: 1 }} />
 
+          {/* Edit details button */}
+          <button
+            onClick={() => window.open("https://autoslay.vercel.app/dashboard", "_blank")}
+            style={{
+              display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem",
+              padding: "0.6875rem",
+              borderRadius: "0.75rem",
+              border: `1px solid ${T.border}`,
+              backgroundColor: "rgba(255,255,255,0.04)",
+              color: "rgba(255,255,255,0.6)",
+              fontWeight: 600, fontSize: "0.8125rem",
+              cursor: "pointer",
+              fontFamily: T.font,
+              letterSpacing: "-0.01em",
+              transition: "all 0.15s",
+            }}
+            onMouseEnter={e => { e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.08)"; e.currentTarget.style.color = "white"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.18)"; }}
+            onMouseLeave={e => { e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.04)"; e.currentTarget.style.color = "rgba(255,255,255,0.6)"; e.currentTarget.style.borderColor = T.border; }}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+            </svg>
+            Edit your details
+          </button>
+
           {/* Main CTA */}
           <button onClick={handleFill} disabled={filling}
             style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "0.625rem", padding: "0.9375rem", borderRadius: "0.875rem", border: "none", backgroundColor: filling ? "rgba(255,255,255,0.07)" : "white", color: filling ? "rgba(255,255,255,0.3)" : "black", fontWeight: 800, fontSize: "0.9375rem", cursor: filling ? "wait" : "pointer", boxShadow: filling ? "none" : "0 4px 16px rgba(0,0,0,0.4)", transition: "all 0.2s", fontFamily: T.font, letterSpacing: "-0.01em" }}
