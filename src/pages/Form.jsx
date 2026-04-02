@@ -19,7 +19,7 @@ const T = {
 /* ══════════════════════════════════════════════════════
    CLOUDINARY CONFIG
 ══════════════════════════════════════════════════════ */
-const CLOUDINARY_CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
+const CLOUDINARY_CLOUD_NAME    = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
 const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
 
 /* ══════════════════════════════════════════════════════
@@ -32,15 +32,17 @@ export const SECTIONS = [
     icon: "👤",
     desc: "Personal, academic, and document information",
     fields: [
-      { key: "firstName", label: "First Name",     placeholder: "Arjun",               required: true },
-      { key: "lastName",  label: "Last Name",       placeholder: "Sharma",              required: true },
-      { key: "email",     label: "Email Address",   placeholder: "arjun@gmail.com",     required: true, type: "email" },
-      { key: "phone",     label: "Contact Number",  placeholder: "+91 98765 43210",      required: true },
-      { key: "collegeName",  label: "College / University Name", placeholder: "JECRC University",   required: true, span: 2 },
-      { key: "degreeName",    label: "Degree / Program",    placeholder: "B.Tech Computer Science",        required: true },
-      { key: "year",          label: "Current Year",           placeholder: "3rd Year",                           required: true },
-      { key: "expectedGraduationYear", label: "Expected Graduation Year", placeholder: "2025", required: true },
-      { key: "rollNumber",    label: "Roll Number / Student ID", placeholder: "21EJCCS001",                     required: false },
+      { key: "firstName",              label: "First Name",                  placeholder: "Arjun",                   required: true },
+      { key: "lastName",               label: "Last Name",                   placeholder: "Sharma",                  required: true },
+      { key: "email",                  label: "Email Address",               placeholder: "arjun@gmail.com",         required: true, type: "email" },
+      { key: "phone",                  label: "Contact Number",              placeholder: "+91 98765 43210",          required: true },
+      { key: "gender",                 label: "Gender",                      placeholder: "",                        required: false, select: ["Male", "Female", "Non-binary", "Prefer not to say"] },
+      { key: "location",               label: "Location / City",             placeholder: "Jaipur, Rajasthan",       required: false },
+      { key: "collegeName",            label: "College / University Name",   placeholder: "JECRC University",        required: true, span: 2 },
+      { key: "degreeName",             label: "Degree / Program",            placeholder: "B.Tech Computer Science", required: true },
+      { key: "year",                   label: "Current Year",                placeholder: "3rd Year",                required: true },
+      { key: "expectedGraduationYear", label: "Expected Graduation Year",    placeholder: "2025",                    required: true },
+      { key: "rollNumber",             label: "Roll Number / Student ID",    placeholder: "21EJCCS001",              required: false },
     ],
   },
 ];
@@ -115,6 +117,48 @@ function Textarea({ value, onChange, placeholder, rows = 3 }) {
   );
 }
 
+/* ── Yes / No radio group with custom labels ── */
+function YesNoField({ label, yesLabel, noLabel, fieldKey, value, onChange }) {
+  return (
+    <div>
+      <Label>{label}</Label>
+      <div style={{ display: "flex", gap: "0.75rem" }}>
+        {[{ val: "yes", display: yesLabel }, { val: "no", display: noLabel }].map(opt => {
+          const active = value === opt.val;
+          return (
+            <button
+              key={opt.val}
+              type="button"
+              onClick={() => onChange(fieldKey, opt.val)}
+              style={{
+                flex: 1,
+                padding: "0.6rem 0",
+                borderRadius: "0.625rem",
+                border: active
+                  ? `1px solid ${opt.val === "yes" ? "rgba(52,211,153,0.5)" : "rgba(248,113,113,0.5)"}`
+                  : "1px solid rgba(255,255,255,0.08)",
+                backgroundColor: active
+                  ? (opt.val === "yes" ? "rgba(52,211,153,0.1)" : "rgba(248,113,113,0.1)")
+                  : "rgba(255,255,255,0.03)",
+                color: active
+                  ? (opt.val === "yes" ? T.accent : T.err)
+                  : "rgba(255,255,255,0.4)",
+                fontSize: "0.8125rem",
+                fontWeight: 600,
+                cursor: "pointer",
+                fontFamily: T.font,
+                transition: "all 0.15s",
+              }}
+            >
+              {opt.display}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 /* ── File upload card ── */
 function FileUpload({ label, required, accept, file, url, progress, onFileChange, uploading, onViewFile }) {
   const inputRef = useRef();
@@ -150,22 +194,9 @@ function FileUpload({ label, required, accept, file, url, progress, onFileChange
         ) : url ? (
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem" }}>
             <span style={{ color: T.accent, fontSize: "1rem" }}>✅</span>
-            <button 
-              onClick={(e) => {
-                e.stopPropagation();
-                onViewFile();
-              }}
-              style={{ 
-                fontSize: "0.75rem", 
-                color: T.accent, 
-                textDecoration: "underline", 
-                background: "none",
-                border: "none",
-                cursor: "pointer",
-                padding: 0,
-                fontFamily: T.font,
-                fontWeight: 500
-              }}>
+            <button
+              onClick={(e) => { e.stopPropagation(); onViewFile(); }}
+              style={{ fontSize: "0.75rem", color: T.accent, textDecoration: "underline", background: "none", border: "none", cursor: "pointer", padding: 0, fontFamily: T.font, fontWeight: 500 }}>
               View uploaded file
             </button>
             <span style={{ fontSize: "0.6875rem", color: "rgba(255,255,255,0.25)" }}>· click to replace</span>
@@ -201,30 +232,18 @@ const uploadToCloudinary = async (file, setProgress) => {
 
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    
     xhr.upload.addEventListener('progress', (e) => {
-      if (e.lengthComputable) {
-        const percentComplete = Math.round((e.loaded / e.total) * 100);
-        setProgress(percentComplete);
-      }
+      if (e.lengthComputable) setProgress(Math.round((e.loaded / e.total) * 100));
     });
-
     xhr.addEventListener('load', () => {
       if (xhr.status === 200) {
         const response = JSON.parse(xhr.responseText);
-        resolve({
-          url: response.secure_url,
-          publicId: response.public_id,
-        });
+        resolve({ url: response.secure_url, publicId: response.public_id });
       } else {
         reject(new Error(`Upload failed with status ${xhr.status}`));
       }
     });
-
-    xhr.addEventListener('error', () => {
-      reject(new Error('Upload failed'));
-    });
-
+    xhr.addEventListener('error', () => reject(new Error('Upload failed')));
     xhr.open('POST', `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/auto/upload`);
     xhr.send(formData);
   });
@@ -245,11 +264,21 @@ export default function Form() {
   const [navOpen,   setNavOpen]   = useState(false);
   const [saveErr,   setSaveErr]   = useState("");
 
+  /* yes/no fields */
+  const [yesNoFields, setYesNoFields] = useState({
+    firstHackathon: "",
+    teamFormed:     "",
+    dietaryNeeds:   "",
+  });
+
+  /* terms — auto-checked */
+  const [termsAccepted, setTermsAccepted] = useState(true);
+
   /* file state */
-  const [resumeFile,    setResumeFile]    = useState(null);
-  const [resumeURL,     setResumeURL]     = useState("");
-  const [resumeProgress,setResumeProgress]= useState(0);
-  const [resumeUploading,setResumeUp]     = useState(false);
+  const [resumeFile,     setResumeFile]     = useState(null);
+  const [resumeURL,      setResumeURL]      = useState("");
+  const [resumeProgress, setResumeProgress] = useState(0);
+  const [resumeUploading,setResumeUp]       = useState(false);
 
   const [photoFile,    setPhotoFile]    = useState(null);
   const [photoURL,     setPhotoURL]     = useState("");
@@ -267,10 +296,10 @@ export default function Form() {
         if (snap.exists()) {
           const data = snap.data();
           setProfile(prev => ({ ...prev, ...data }));
-          
-          // Load URLs from Firestore
-          if (data.resumeURL) setResumeURL(data.resumeURL);
+          if (data.resumeURL)      setResumeURL(data.resumeURL);
           if (data.collegePhotoURL) setPhotoURL(data.collegePhotoURL);
+          if (data.yesNoFields)    setYesNoFields(prev => ({ ...prev, ...data.yesNoFields }));
+          if (data.termsAccepted !== undefined) setTermsAccepted(data.termsAccepted);
         }
       } catch (e) { console.error("Load error:", e); }
       finally { setLoading(false); }
@@ -286,30 +315,22 @@ export default function Form() {
     setSaved(false); setSaveErr("");
   };
 
-  /* ── View file handler ── */
-  const handleViewResumeFile = () => {
-    if (resumeURL) {
-      window.open(resumeURL, "_blank");
-    }
+  const handleYesNo = (key, val) => {
+    setYesNoFields(p => ({ ...p, [key]: val }));
+    setSaved(false);
   };
 
-  const handleViewPhotoFile = () => {
-    if (photoURL) {
-      window.open(photoURL, "_blank");
-    }
-  };
+  const handleViewResumeFile = () => { if (resumeURL) window.open(resumeURL, "_blank"); };
+  const handleViewPhotoFile  = () => { if (photoURL)  window.open(photoURL,  "_blank"); };
 
   /* ── save ── */
   const handleSave = async () => {
     if (!user) return;
 
-    /* Check if Cloudinary is configured */
     if (!CLOUDINARY_CLOUD_NAME || !CLOUDINARY_UPLOAD_PRESET) {
       setSaveErr("⚠️ Cloudinary is not configured. Please add VITE_CLOUDINARY_CLOUD_NAME and VITE_CLOUDINARY_UPLOAD_PRESET to your .env file.");
       return;
     }
-
-    /* resume is required */
     if (!resumeURL && !resumeFile) {
       setSaveErr("⚠️ Resume is required. Please upload your resume before saving.");
       return;
@@ -318,56 +339,45 @@ export default function Form() {
     setSaving(true); setSaveErr("");
     try {
       let finalResumeURL = resumeURL;
-      let finalPhotoURL = photoURL;
+      let finalPhotoURL  = photoURL;
 
-      // Upload resume to Cloudinary if new file selected
       if (resumeFile) {
         setResumeUp(true);
         try {
           const result = await uploadToCloudinary(resumeFile, setResumeProgress);
-          finalResumeURL = result.url;
-          setResumeURL(result.url);
+          finalResumeURL = result.url; setResumeURL(result.url);
         } catch (error) {
           setSaveErr("Failed to upload resume: " + error.message);
-          setResumeUp(false);
-          setSaving(false);
-          return;
+          setResumeUp(false); setSaving(false); return;
         }
         setResumeUp(false);
       }
 
-      // Upload photo to Cloudinary if new file selected
       if (photoFile) {
         setPhotoUp(true);
         try {
           const result = await uploadToCloudinary(photoFile, setPhotoProgress);
-          finalPhotoURL = result.url;
-          setPhotoURL(result.url);
+          finalPhotoURL = result.url; setPhotoURL(result.url);
         } catch (error) {
           setSaveErr("Failed to upload photo: " + error.message);
-          setPhotoUp(false);
-          setSaving(false);
-          return;
+          setPhotoUp(false); setSaving(false); return;
         }
         setPhotoUp(false);
       }
 
-      // Save to Firestore
       await setDoc(doc(db, "profiles", user.uid), {
         ...profile,
-        resumeURL: finalResumeURL || "",
-        collegePhotoURL: finalPhotoURL || "",
+        yesNoFields,
+        termsAccepted,
+        resumeURL:       finalResumeURL || "",
+        collegePhotoURL: finalPhotoURL  || "",
         updatedAt: new Date().toISOString(),
-        uid: user.uid,
+        uid:   user.uid,
         email: user.email,
       });
 
       setSaved(true);
-      setTimeout(() => {
-        setSaved(false);
-        // Redirect to Home.jsx after successful save
-        navigate("/home");
-      }, 2000);
+      setTimeout(() => { setSaved(false); navigate("/home"); }, 2000);
     } catch (e) {
       setSaveErr("Failed to save: " + e.message);
     } finally {
@@ -376,7 +386,6 @@ export default function Form() {
   };
 
   const currentSection = SECTIONS.find(s => s.id === active);
-  const currentIdx     = SECTIONS.findIndex(s => s.id === active);
 
   if (loading) {
     return (
@@ -402,26 +411,18 @@ export default function Form() {
         transition: "transform 0.3s",
       }}>
         <div style={{ position: "relative", zIndex: 10, display: "flex", flexDirection: "column", height: "100%", padding: "1.5rem 1rem", overflowY: "auto" }}>
-
-          {/* Brand */}
           <div style={{ display: "flex", alignItems: "center", gap: "0.625rem", marginBottom: "1.75rem" }}>
             <div style={{ display: "flex", height: "2rem", width: "2rem", alignItems: "center", justifyContent: "center", borderRadius: "0.625rem", backgroundColor: "white", color: "black", fontSize: "0.875rem", fontWeight: 900 }}>⚡</div>
             <span style={{ fontSize: "0.9375rem", fontWeight: 700, letterSpacing: "-0.02em" }}>Profile Setup</span>
           </div>
 
-          {/* Section nav */}
           <nav style={{ display: "flex", flexDirection: "column", gap: "0.2rem", flex: 1 }}>
             {SECTIONS.map(sec => {
               const isActive = active === sec.id;
               const secFilled = sec.fields.filter(f => profile[f.key]?.trim()).length;
               return (
                 <div key={sec.id} onClick={() => { setActive(sec.id); setNavOpen(false); }}
-                  style={{
-                    borderRadius: "0.625rem", padding: "0.625rem 0.75rem", cursor: "pointer",
-                    border: isActive ? "1px solid rgba(255,255,255,0.15)" : "1px solid transparent",
-                    backgroundColor: isActive ? "rgba(255,255,255,0.08)" : "transparent",
-                    transition: "all 0.15s",
-                  }}
+                  style={{ borderRadius: "0.625rem", padding: "0.625rem 0.75rem", cursor: "pointer", border: isActive ? "1px solid rgba(255,255,255,0.15)" : "1px solid transparent", backgroundColor: isActive ? "rgba(255,255,255,0.08)" : "transparent", transition: "all 0.15s" }}
                 >
                   <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                     <span style={{ fontSize: "0.875rem" }}>{sec.icon}</span>
@@ -437,7 +438,6 @@ export default function Form() {
 
           <div style={{ flex: 1 }} />
 
-          {/* User */}
           <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", borderRadius: "0.75rem", border: `1px solid ${T.border}`, backgroundColor: "rgba(255,255,255,0.03)", padding: "0.75rem" }}>
             <div style={{ display: "flex", height: "2rem", width: "2rem", flexShrink: 0, alignItems: "center", justifyContent: "center", borderRadius: "9999px", border: "1px solid rgba(255,255,255,0.1)", backgroundColor: "rgba(255,255,255,0.1)", fontSize: "0.875rem" }}>
               {user?.photoURL ? <img src={user.photoURL} alt="" style={{ width: "100%", height: "100%", borderRadius: "9999px", objectFit: "cover" }} /> : "👤"}
@@ -447,8 +447,7 @@ export default function Form() {
               <p style={{ margin: 0, fontSize: "0.625rem", color: "rgba(255,255,255,0.25)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user?.email}</p>
             </div>
             <button onClick={async () => { await signOut(auth); navigate("/"); }}
-              style={{ flexShrink: 0, borderRadius: "0.5rem", padding: "0.375rem", color: "rgba(255,255,255,0.2)", background: "none", border: "none", cursor: "pointer" }}
-            >
+              style={{ flexShrink: 0, borderRadius: "0.5rem", padding: "0.375rem", color: "rgba(255,255,255,0.2)", background: "none", border: "none", cursor: "pointer" }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
             </button>
           </div>
@@ -464,8 +463,7 @@ export default function Form() {
         <header style={{ display: "flex", flexShrink: 0, alignItems: "center", justifyContent: "space-between", borderBottom: `1px solid ${T.border}`, backgroundColor: "rgba(8,8,8,0.9)", padding: "0.875rem 1.25rem", backdropFilter: "blur(12px)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
             <button className="hamburger" onClick={() => setNavOpen(true)}
-              style={{ borderRadius: "0.5rem", padding: "0.375rem", color: "rgba(255,255,255,0.3)", background: "none", border: "none", cursor: "pointer" }}
-            >
+              style={{ borderRadius: "0.5rem", padding: "0.375rem", color: "rgba(255,255,255,0.3)", background: "none", border: "none", cursor: "pointer" }}>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
             </button>
             <div>
@@ -502,7 +500,6 @@ export default function Form() {
           </div>
         )}
 
-        
         {/* Fields */}
         <div ref={contentRef} style={{ flex: 1, overflowY: "auto", padding: "1.25rem" }}>
           <div style={{ maxWidth: "820px", margin: "0 auto" }}>
@@ -513,7 +510,7 @@ export default function Form() {
                 <div key={field.key} style={{ gridColumn: field.span === 2 ? "1 / -1" : "auto" }}>
                   <Label required={field.required}>{field.label}</Label>
                   {field.select ? (
-                    <Select value={profile[field.key]} onChange={set(field.key)} options={field.select} placeholder={field.placeholder} />
+                    <Select value={profile[field.key]} onChange={set(field.key)} options={field.select} placeholder={field.placeholder || "Select…"} />
                   ) : field.textarea ? (
                     <Textarea value={profile[field.key]} onChange={set(field.key)} placeholder={field.placeholder} rows={field.rows || 3} />
                   ) : (
@@ -523,10 +520,9 @@ export default function Form() {
               ))}
             </div>
 
-            {/* Documents section */}
+            {/* ── Documents section ── */}
             <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem", marginTop: "2rem" }}>
 
-              {/* Info banner */}
               <div style={{ borderRadius: "0.75rem", border: "1px solid rgba(52,211,153,0.15)", backgroundColor: "rgba(52,211,153,0.04)", padding: "0.875rem 1rem" }}>
                 <p style={{ margin: 0, fontSize: "0.8125rem", color: "rgba(52,211,153,0.8)", fontWeight: 500 }}>
                   📎 Resume is <strong>required</strong>. College Photo ID is optional. Files uploaded to Cloudinary.
@@ -534,7 +530,6 @@ export default function Form() {
               </div>
 
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.25rem" }} className="fields-grid">
-                {/* Resume */}
                 <FileUpload
                   label="Resume / CV"
                   required={true}
@@ -546,8 +541,6 @@ export default function Form() {
                   onFileChange={f => { setResumeFile(f); setResumeURL(""); setSaveErr(""); }}
                   onViewFile={handleViewResumeFile}
                 />
-
-                {/* College Photo ID */}
                 <FileUpload
                   label="College Photo ID"
                   required={false}
@@ -564,6 +557,87 @@ export default function Form() {
               <p style={{ margin: 0, fontSize: "0.6875rem", color: "rgba(255,255,255,0.2)", textAlign: "center" }}>
                 Files are securely stored on Cloudinary and accessible only via the URL.
               </p>
+            </div>
+
+            {/* ── Yes / No section ── */}
+            <div style={{ marginTop: "2rem", display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+              <div style={{ borderBottom: `1px solid ${T.border}`, paddingBottom: "0.5rem" }}>
+                <p style={{ margin: 0, fontSize: "0.6875rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.12em", color: "rgba(255,255,255,0.25)" }}>
+                  Quick questions
+                </p>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }} className="fields-grid">
+                <YesNoField
+                  label="Is this your first hackathon?"
+                  yesLabel="🎉 First timer!"
+                  noLabel="🔥 Veteran"
+                  fieldKey="firstHackathon"
+                  value={yesNoFields.firstHackathon}
+                  onChange={handleYesNo}
+                />
+                <YesNoField
+                  label="Have you already formed a team?"
+                  yesLabel="✅ Team ready"
+                  noLabel="🔍 Need team"
+                  fieldKey="teamFormed"
+                  value={yesNoFields.teamFormed}
+                  onChange={handleYesNo}
+                />
+                <YesNoField
+                  label="Any dietary / accessibility needs?"
+                  yesLabel="Yes, I do"
+                  noLabel="No, all good"
+                  fieldKey="dietaryNeeds"
+                  value={yesNoFields.dietaryNeeds}
+                  onChange={handleYesNo}
+                />
+              </div>
+            </div>
+
+            {/* ── Terms & Conditions (auto-checked) ── */}
+            <div style={{ marginTop: "1.75rem" }}>
+              <div
+                onClick={() => setTermsAccepted(v => !v)}
+                style={{
+                  display: "flex", alignItems: "flex-start", gap: "0.75rem",
+                  borderRadius: "0.75rem",
+                  border: `1px solid ${termsAccepted ? "rgba(52,211,153,0.25)" : T.border}`,
+                  backgroundColor: termsAccepted ? "rgba(52,211,153,0.04)" : "rgba(255,255,255,0.02)",
+                  padding: "0.875rem 1rem",
+                  cursor: "pointer",
+                  transition: "all 0.2s",
+                }}
+              >
+                <div style={{
+                  width: 18, height: 18, flexShrink: 0, marginTop: "0.1rem",
+                  borderRadius: "0.375rem",
+                  border: termsAccepted ? "1px solid rgba(52,211,153,0.6)" : "1px solid rgba(255,255,255,0.15)",
+                  backgroundColor: termsAccepted ? T.accent : "transparent",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  transition: "all 0.2s",
+                }}>
+                  {termsAccepted && (
+                    <svg width="11" height="11" viewBox="0 0 10 10" fill="none">
+                      <path d="M2 5L4.2 7.2L8 3" stroke="#080808" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  )}
+                </div>
+                <p style={{ margin: 0, fontSize: "0.8125rem", color: "rgba(255,255,255,0.5)", lineHeight: 1.6 }}>
+                  I agree to the{" "}
+                  <button onClick={e => { e.stopPropagation(); window.open("https://autofill-agent.vercel.app/terms", "_blank"); }}
+                    style={{ background: "none", border: "none", color: T.accent, cursor: "pointer", padding: 0, fontFamily: T.font, fontSize: "inherit", textDecoration: "underline" }}>
+                    Terms & Conditions
+                  </button>
+                  {" "}and{" "}
+                  <button onClick={e => { e.stopPropagation(); window.open("https://autofill-agent.vercel.app/privacy", "_blank"); }}
+                    style={{ background: "none", border: "none", color: T.accent, cursor: "pointer", padding: 0, fontFamily: T.font, fontSize: "inherit", textDecoration: "underline" }}>
+                    Privacy Policy
+                  </button>
+                  .{" "}
+                  <span style={{ fontSize: "0.75rem", color: "rgba(52,211,153,0.6)" }}>(auto-accepted)</span>
+                </p>
+              </div>
             </div>
 
             {/* Save button */}
@@ -592,6 +666,7 @@ export default function Form() {
         input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.4); }
         ::-webkit-scrollbar { width: 4px; height: 4px; }
         ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 9999px; }
+        select option { background: #1a1a1a; }
       `}</style>
     </div>
   );
