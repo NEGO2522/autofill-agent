@@ -1,151 +1,322 @@
 /**
- * AUTOSLAY AGENT — Content Script
- * This runs inside the webpage you are visiting.
+ * AUTOSLAY AGENT — Content Script (v2)
+ * Runs inside every webpage. Listens for AUTOSLAY_FILL from the popup.
  */
 
-console.log("⚡ AutoSlay Agent is ready on this page.");
+console.log("⚡ AutoSlay content script loaded.");
 
-// Listen for messages from the popup (your React app)
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.action === "AUTOSLAY_FILL") {
-    const profile = request.profile;
-    console.log("🚀 Starting AutoFill with profile:", profile);
-    
-    fillForm(profile).then(results => {
-      sendResponse({ status: "done", filled: results.filled });
-    });
-    return true; // Keep message channel open for async response
+/* ══════════════════════════════════════════════════════
+   COMPREHENSIVE FIELD MAP
+   Each entry: { keys: string[], profile: keyof profile }
+══════════════════════════════════════════════════════ */
+const FIELD_MAP = [
+  // Identity
+  { keys: ["firstname","first_name","first name","fname","given name","given_name"],       profile: "firstName"               },
+  { keys: ["lastname","last_name","last name","lname","surname","family name","last_name"], profile: "lastName"                },
+  { keys: ["fullname","full_name","full name","your name","participant name","name"],       profile: "__fullName"              },
+  { keys: ["email","e-mail","mail","email address","emailaddress","email_address"],         profile: "email"                   },
+  { keys: ["phone","mobile","contact","phonenumber","phone_number","mobile number","contact number","whatsapp","ph"], profile: "phone" },
+  { keys: ["dob","date of birth","birth date","birthday","dateofbirth","date_of_birth"],   profile: "dob"                     },
+  { keys: ["gender","sex"],                                                                 profile: "gender"                  },
+
+  // Address
+  { keys: ["address","address1","street","street address","house","addr"],                  profile: "address1"                },
+  { keys: ["address2","apartment","suite","flat","apt"],                                    profile: "address2"                },
+  { keys: ["city","town","district"],                                                       profile: "city"                    },
+  { keys: ["state","province","region"],                                                    profile: "state"                   },
+  { keys: ["pincode","zip","postal","zipcode","postalcode","pin","zip code","postal code"], profile: "pincode"                 },
+  { keys: ["country"],                                                                      profile: "country"                 },
+
+  // Education
+  { keys: ["college","university","institution","school","collegename","university name","institute","college name","clg"], profile: "collegeName" },
+  { keys: ["degree","qualification","program","course","branch","degreename","degree name","stream","major"],               profile: "degreeName"  },
+  { keys: ["current year","currentyear","study year","yearofstudy","year of study","semester","sem","year of study"],       profile: "year"        },
+  { keys: ["graduation year","graduationyear","passing year","passout","passout year","expected graduation","graduating year","batch","passout_year"], profile: "expectedGraduationYear" },
+  { keys: ["rollno","roll","rollnumber","roll number","student id","enrollment","registrationnumber","reg no","reg_no","roll_no"], profile: "rollNumber" },
+  { keys: ["cgpa","gpa","percentage","marks","score","aggregate","grades"],                 profile: "cgpa"                    },
+
+  // Professional
+  { keys: ["organization","org","company","employer","workplace","company name","organisation"], profile: "organization"       },
+  { keys: ["jobtitle","job title","designation","job role","position","title"],             profile: "jobTitle"                },
+  { keys: ["experience","work experience","years of experience","exp","yoe"],               profile: "experience"              },
+  { keys: ["skills","technical skills","technologies","tech stack","expertise","skillset","skill set","tools"], profile: "skills" },
+  { keys: ["ctc","current ctc","current salary","salary","package"],                        profile: "ctc"                     },
+  { keys: ["expectedctc","expected ctc","expected salary","expected package"],              profile: "expectedCtc"             },
+  { keys: ["notice","notice period","noticeperiod","availability","joining"],               profile: "noticePeriod"            },
+
+  // Social / Links
+  { keys: ["linkedin","linkedin url","linkedin profile","linkedin_url"],                    profile: "linkedin"                },
+  { keys: ["github","github url","github profile","github link","github_url"],              profile: "github"                  },
+  { keys: ["portfolio","website","personal website","portfolio url","personal site"],       profile: "portfolio"               },
+  { keys: ["twitter","twitter handle","twitter url","twitter_url"],                         profile: "twitter"                 },
+  { keys: ["leetcode","leetcode url","leetcode profile"],                                   profile: "leetcode"                },
+  { keys: ["instagram","instagram url","instagram handle"],                                 profile: "instagram"               },
+
+  // Hackathon / Team
+  { keys: ["team name","teamname","team_name","your team"],                                 profile: "teamName"                },
+  { keys: ["team size","teamsize","team_size","no of members","number of members"],         profile: "teamSize"                },
+  { keys: ["team role","teamrole","your role","role in team","team_role"],                  profile: "teamRole"                },
+  { keys: ["project name","projectname","project title","project_name"],                    profile: "projectName"             },
+  { keys: ["project description","projectdescription","project idea","idea","abstract","project abstract","project_description"], profile: "projectDescription" },
+  { keys: ["github repo","githublink","repo link","repository","repo url","github repository"], profile: "github"              },
+  { keys: ["demo link","demolink","demo url","live link","deployed link","demo_link"],      profile: "demoLink"                },
+  { keys: ["achievements","achievement","awards","accomplishments"],                         profile: "achievements"            },
+
+  // Documents
+  { keys: ["resume","cv","resume url","resume link","resumeurl","resume_url","upload resume"], profile: "resumeURL"            },
+
+  // Bio / Long-form
+  { keys: ["bio","about","about you","about yourself","introduction","intro","tell us about yourself","describe yourself"], profile: "bio" },
+  { keys: ["why us","whyus","why do you want","motivation","why join","why hackathon","why participate","why_us"],          profile: "whyUs" },
+  { keys: ["strengths","strength","your strengths","key strengths"],                        profile: "strengths"               },
+  { keys: ["hobbies","hobby","interests","interest","passions"],                             profile: "hobbies"                 },
+  { keys: ["message","additional info","anything else","comments","remarks","other details","additional comments"], profile: "message" },
+];
+
+const AUTO_CHECK_KEYWORDS = [
+  "terms","condition","privacy","policy","agree","consent",
+  "accept","certify","confirm","acknowledge","newsletter",
+  "code of conduct","mlh","18","above","rules"
+];
+
+/* ══════════════════════════════════════════════════════
+   REACT-COMPATIBLE VALUE SETTER
+   Standard el.value = x won't trigger React's onChange.
+   We use the native input value descriptor trick.
+══════════════════════════════════════════════════════ */
+function setNativeValue(el, value) {
+  const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+    el.tagName === "TEXTAREA" ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype,
+    "value"
+  )?.set;
+
+  if (nativeInputValueSetter) {
+    nativeInputValueSetter.call(el, value);
+  } else {
+    el.value = value;
   }
-});
 
-/**
- * The actual filling logic
- */
-async function fillForm(profile) {
-  let filledCount = 0;
-
-  // 1. Find all inputs/selects/textareas
-  const elements = document.querySelectorAll("input:not([type='hidden']):not([type='submit']):not([type='button']), textarea, select");
-
-  for (const el of elements) {
-    // Skip if hidden or disabled
-    if (el.offsetParent === null || el.disabled) continue;
-
-    // Get field hints (id, name, placeholder, label text, and context)
-    const hints = Array.from(new Set([
-      el.id,
-      el.name,
-      el.placeholder,
-      el.getAttribute("aria-label"),
-      el.getAttribute("data-label"),
-      el.getAttribute("title"),
-      getLabelText(el),
-      getContextText(el)
-    ])).map(h => (h || "").toLowerCase().trim()).filter(Boolean);
-
-    // Match hints against profile fields
-    const value = findMatchingValue(hints, profile);
-
-    if (value) {
-      if (el.tagName === "SELECT") {
-        selectOption(el, value);
-      } else if (el.type === "checkbox" || el.type === "radio") {
-        // Auto-check terms/policies if value is truthy (advanced)
-        const combined = hints.join(" ");
-        if (["terms", "privacy", "policy", "agree"].some(k => combined.includes(k))) {
-           el.checked = true;
-        }
-      } else {
-        el.value = value;
-        // Trigger React/Vue change listeners
-        el.dispatchEvent(new Event('input', { bubbles: true }));
-        el.dispatchEvent(new Event('change', { bubbles: true }));
-      }
-      filledCount++;
-      highlightField(el);
-      // Small delay for realism & to allow page logic to react
-      await new Promise(r => setTimeout(r, 100));
-    }
-  }
-
-  return { filled: filledCount };
+  el.dispatchEvent(new Event("input",  { bubbles: true }));
+  el.dispatchEvent(new Event("change", { bubbles: true }));
+  el.dispatchEvent(new KeyboardEvent("keydown",  { bubbles: true }));
+  el.dispatchEvent(new KeyboardEvent("keyup",    { bubbles: true }));
 }
 
-/**
- * Enhanced matching logic
- */
-function findMatchingValue(hints, profile) {
-  const map = {
-    firstName: ["first name", "firstname", "fname", "given name", "first_name"],
-    lastName:  ["last name", "lastname", "lname", "surname", "family name", "last_name"],
-    email:     ["email", "e-mail", "mail", "email address", "email_address"],
-    phone:     ["phone", "mobile", "contact", "phonenumber", "phone_number", "whatsapp"],
-    collegeName: ["college", "university", "school", "institution", "college_name", "university_name"],
-    degreeName:  ["degree", "major", "program", "course", "degree_name", "stream"],
-    year:        ["year", "semester", "current year", "current_year", "sem"],
-    expectedGraduationYear: ["graduation year", "passout year", "batch", "expected graduation"],
-    rollNumber:  ["roll number", "rollno", "student id", "enrollment"],
+/* ══════════════════════════════════════════════════════
+   GET FIELD HINTS FROM A DOM ELEMENT
+══════════════════════════════════════════════════════ */
+function getFieldHints(el) {
+  const raw = [];
+  const add = (v) => { if (v && typeof v === "string") raw.push(v.toLowerCase().trim()); };
+
+  add(el.name);
+  add(el.id);
+  add(el.placeholder);
+  add(el.getAttribute("aria-label"));
+  add(el.getAttribute("data-label"));
+  add(el.getAttribute("data-field"));
+  add(el.getAttribute("title"));
+  add(el.getAttribute("autocomplete"));
+
+  // Associated <label for="id">
+  if (el.id) {
+    const lbl = document.querySelector(`label[for="${CSS.escape(el.id)}"]`);
+    if (lbl) add(lbl.innerText.trim());
+  }
+
+  // Wrapping <label>
+  const parentLabel = el.closest("label");
+  if (parentLabel) add(parentLabel.innerText.trim());
+
+  // Previous sibling that looks like a label
+  const prev = el.previousElementSibling;
+  if (prev && ["LABEL","SPAN","P","H3","H4","DIV"].includes(prev.tagName)) {
+    const t = prev.innerText?.trim();
+    if (t && t.length < 80) add(t);
+  }
+
+  // Nearest wrapping div/fieldset label
+  const wrap = el.closest("div, fieldset, li, section");
+  if (wrap) {
+    const wrapLabel = wrap.querySelector("label");
+    if (wrapLabel && !wrapLabel.contains(el)) add(wrapLabel.innerText.trim());
+  }
+
+  return [...new Set(raw)].filter(h => h.length > 0 && h.length < 100);
+}
+
+/* ══════════════════════════════════════════════════════
+   MATCH HINTS → PROFILE VALUE
+══════════════════════════════════════════════════════ */
+function findProfileValue(hints, profile) {
+  // Build full name
+  const fullProfile = {
+    ...profile,
+    __fullName: [profile.firstName, profile.lastName].filter(Boolean).join(" "),
   };
 
-  for (const [profKey, keywords] of Object.entries(map)) {
-    // Check if any keyword matches any hint (fuzzy matching)
-    if (keywords.some(k => hints.some(h => h.includes(k) || k.includes(h)))) {
-      const val = profile[profKey];
-      if (val && String(val).trim()) return String(val).trim();
+  for (const entry of FIELD_MAP) {
+    for (const keyword of entry.keys) {
+      for (const hint of hints) {
+        if (hint.includes(keyword) || keyword.includes(hint)) {
+          const val = fullProfile[entry.profile];
+          if (val && String(val).trim()) return String(val).trim();
+        }
+      }
     }
   }
-  
-  // Special case for full name if we don't have separate fields
-  if (profile.firstName && profile.lastName) {
-     const fullNameKeywords = ["full name", "fullname", "your name", "name"];
-     if (fullNameKeywords.some(k => hints.some(h => h.includes(k) || k.includes(h)))) {
-        return `${profile.firstName} ${profile.lastName}`;
-     }
-  }
-
   return null;
 }
 
-function getLabelText(el) {
-  if (el.id) {
-    const label = document.querySelector(`label[for="${el.id}"]`);
-    if (label) return label.innerText;
-  }
-  const parentLabel = el.closest("label");
-  if (parentLabel) return parentLabel.innerText;
-  
-  // Check previous elements for labels
-  const prev = el.previousElementSibling;
-  if (prev && ["LABEL", "SPAN", "P", "H3", "H4"].includes(prev.tagName)) return prev.innerText;
-
-  return "";
-}
-
-function getContextText(el) {
-  const container = el.closest("div, fieldset, section");
-  if (container) {
-    const text = container.innerText || "";
-    // Return first 50 chars of nearby text as context
-    return text.slice(0, 100);
-  }
-  return "";
-}
-
-function selectOption(el, value) {
+/* ══════════════════════════════════════════════════════
+   SELECT OPTION HELPER
+══════════════════════════════════════════════════════ */
+function selectBestOption(el, value) {
   const options = Array.from(el.options);
-  const best = options.find(o => 
-    o.text.toLowerCase().includes(value.toLowerCase()) || 
-    o.value.toLowerCase().includes(value.toLowerCase())
-  );
+  const v = value.toLowerCase();
+
+  // 1. Exact value match
+  let best = options.find(o => o.value.toLowerCase() === v);
+  // 2. Exact text match
+  if (!best) best = options.find(o => o.text.toLowerCase() === v);
+  // 3. Text includes value
+  if (!best) best = options.find(o => o.text.toLowerCase().includes(v));
+  // 4. Value includes option text
+  if (!best) best = options.find(o => v.includes(o.text.toLowerCase()) && o.text.length > 2);
+
   if (best) {
     el.value = best.value;
-    el.dispatchEvent(new Event('change', { bubbles: true }));
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+    return true;
   }
+  return false;
 }
 
-function highlightField(el) {
-  const original = el.style.boxShadow;
-  el.style.boxShadow = "0 0 0 4px rgba(52, 211, 153, 0.4)";
-  el.style.transition = "box-shadow 0.3s ease";
-  setTimeout(() => el.style.boxShadow = original, 2000);
+/* ══════════════════════════════════════════════════════
+   HIGHLIGHT HELPER
+══════════════════════════════════════════════════════ */
+function highlight(el) {
+  const prev = el.style.outline;
+  el.style.outline = "2px solid rgba(52,211,153,0.8)";
+  el.style.outlineOffset = "2px";
+  setTimeout(() => {
+    el.style.outline = prev;
+    el.style.outlineOffset = "";
+  }, 2500);
 }
+
+/* ══════════════════════════════════════════════════════
+   MAIN FILL FUNCTION
+══════════════════════════════════════════════════════ */
+async function fillForm(profile) {
+  let filled = 0;
+  const log = [];
+
+  const delay = (ms) => new Promise(r => setTimeout(r, ms));
+
+  // All visible, interactive form elements
+  const selector = [
+    "input:not([type='hidden']):not([type='submit']):not([type='button']):not([type='image'])",
+    "textarea",
+    "select",
+    "input[type='checkbox']",
+    "input[type='radio']",
+  ].join(", ");
+
+  const elements = Array.from(document.querySelectorAll(selector));
+
+  for (const el of elements) {
+    // Skip invisible / disabled / readonly
+    if (el.offsetParent === null && el.type !== "hidden") continue;
+    if (el.disabled) continue;
+    if (el.readOnly) continue;
+
+    const rect = el.getBoundingClientRect();
+    if (rect.width === 0 && rect.height === 0 && el.type !== "hidden") continue;
+
+    const hints = getFieldHints(el);
+    if (hints.length === 0) continue;
+
+    // ── Checkbox ──
+    if (el.type === "checkbox") {
+      const combined = hints.join(" ");
+      if (AUTO_CHECK_KEYWORDS.some(k => combined.includes(k))) {
+        if (!el.checked) {
+          el.click();
+          log.push(`☑️ Checked: ${hints[0]}`);
+          filled++;
+          await delay(60);
+        }
+      }
+      continue;
+    }
+
+    // ── Radio ──
+    if (el.type === "radio") {
+      const value = findProfileValue(hints, profile);
+      if (value) {
+        const radioVal = el.value.toLowerCase();
+        const profileVal = value.toLowerCase();
+        if (radioVal.includes(profileVal) || profileVal.includes(radioVal)) {
+          el.checked = true;
+          el.dispatchEvent(new Event("change", { bubbles: true }));
+          log.push(`🔘 Selected radio: ${hints[0]} → ${el.value}`);
+          filled++;
+          await delay(60);
+        }
+      }
+      continue;
+    }
+
+    // ── Select dropdown ──
+    if (el.tagName === "SELECT") {
+      const value = findProfileValue(hints, profile);
+      if (value) {
+        const ok = selectBestOption(el, value);
+        if (ok) {
+          log.push(`📋 Selected: ${hints[0]} → ${value}`);
+          highlight(el);
+          filled++;
+          await delay(80);
+        }
+      }
+      continue;
+    }
+
+    // ── Text / email / tel / number / textarea ──
+    const value = findProfileValue(hints, profile);
+    if (value) {
+      el.focus();
+      setNativeValue(el, value);
+      el.blur();
+      highlight(el);
+      log.push(`✏️ Filled: ${hints[0]} → ${value.slice(0, 40)}${value.length > 40 ? "…" : ""}`);
+      filled++;
+      await delay(80);
+    }
+  }
+
+  return { filled, log };
+}
+
+/* ══════════════════════════════════════════════════════
+   MESSAGE LISTENER
+══════════════════════════════════════════════════════ */
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.action === "AUTOSLAY_FILL") {
+    console.log("⚡ AutoSlay: Starting fill with profile keys:", Object.keys(request.profile));
+    fillForm(request.profile).then(({ filled, log }) => {
+      console.log(`⚡ AutoSlay: Filled ${filled} fields.`, log);
+      sendResponse({ status: "done", filled, log });
+    }).catch(err => {
+      console.error("⚡ AutoSlay fill error:", err);
+      sendResponse({ status: "error", filled: 0, log: [] });
+    });
+    return true; // Keep message channel open for async response
+  }
+
+  if (request.action === "AUTOSLAY_PING") {
+    sendResponse({ status: "ready" });
+    return true;
+  }
+});
