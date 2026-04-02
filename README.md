@@ -1,12 +1,12 @@
-# AutoFill Agent
+# Fillux
 
-**AutoFill Agent** is a profile management platform built with React, Tailwind CSS, and Firebase. It allows you to store your personal, academic, and document details once, so they can be securely accessed when filling out forms or applications.
+**Fillux** is a profile management platform built with React, Tailwind CSS, and Firebase. It allows you to store your personal, academic, and document details once, so they can be securely accessed when filling out forms or applications.
 
 ---
 
 ## 🚀 Key Flow
 
-1. **Landing Page** — Introduces the "AutoSlay" ecosystem.
+1. **Landing Page** — Introduces the "Fillux" ecosystem.
 2. **Authentication** — Sign in or create an account via Firebase Auth (Google Auth supported).
 3. **Profile Setup (`Form.jsx`)** — Complete your profile including personal data, college details, and document uploads.
 4. **Cloudinary Integration** — Resumes and Photo IDs are stored securely on Cloudinary.
@@ -33,8 +33,8 @@ Make sure you have **Node.js** installed on your machine.
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/your-username/autofill-agent.git
-cd autofill-agent
+git clone https://github.com/your-username/fillux.git
+cd fillux
 ```
 
 ### 2. Install Dependencies
@@ -75,7 +75,7 @@ Open your browser and visit `http://localhost:5173`
 ## 🏗️ Project Structure
 
 ```
-autofill-agent/
+fillux/
 ├── src/
 │   ├── components/    # Reusable UI components
 │   ├── contexts/      # AuthContext to manage user state

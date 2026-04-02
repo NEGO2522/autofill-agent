@@ -253,7 +253,7 @@ function Spinner({ size = 14, color = "white" }) {
 ══════════════════════════════════════════════════════ */
 async function sendFill(tabId, profile) {
   return new Promise((resolve) => {
-    chrome.tabs.sendMessage(tabId, { action: "AUTOSLAY_PING" }, (pingResp) => {
+    chrome.tabs.sendMessage(tabId, { action: "FILLUX_PING" }, (pingResp) => {
       if (chrome.runtime.lastError || !pingResp) {
         chrome.scripting.executeScript(
           { target: { tabId }, files: ["content.js"] },
@@ -263,7 +263,7 @@ async function sendFill(tabId, profile) {
               return;
             }
             setTimeout(() => {
-              chrome.tabs.sendMessage(tabId, { action: "AUTOSLAY_FILL", profile }, (resp) => {
+              chrome.tabs.sendMessage(tabId, { action: "FILLUX_FILL", profile }, (resp) => {
                 if (chrome.runtime.lastError) {
                   resolve({ error: "Page refused connection. Try refreshing." });
                 } else {
@@ -274,7 +274,7 @@ async function sendFill(tabId, profile) {
           }
         );
       } else {
-        chrome.tabs.sendMessage(tabId, { action: "AUTOSLAY_FILL", profile }, (resp) => {
+        chrome.tabs.sendMessage(tabId, { action: "FILLUX_FILL", profile }, (resp) => {
           if (chrome.runtime.lastError) {
             resolve({ error: chrome.runtime.lastError.message });
           } else {
@@ -423,7 +423,7 @@ export default function ExtensionPopup() {
       try {
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
         if (tab) {
-          chrome.tabs.sendMessage(tab.id, { action: "AUTOSLAY_CLICK_NEXT" }, () => {});
+          chrome.tabs.sendMessage(tab.id, { action: "FILLUX_CLICK_NEXT" }, () => {});
         }
       } catch (_) {}
 
@@ -502,7 +502,7 @@ export default function ExtensionPopup() {
             display: "flex", alignItems: "center", justifyContent: "center",
             fontSize: "0.8125rem", fontWeight: 900, flexShrink: 0,
           }}>⚡</div>
-          <span style={{ fontSize: "0.9375rem", fontWeight: 800, letterSpacing: "-0.02em" }}>AutoSlay</span>
+          <span style={{ fontSize: "0.9375rem", fontWeight: 800, letterSpacing: "-0.02em" }}>Fillux</span>
         </div>
         {user && (
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
@@ -534,7 +534,7 @@ export default function ExtensionPopup() {
               {authMode === "login" ? "Welcome back" : "Create account"}
             </p>
             <p style={{ margin: "0.25rem 0 0", fontSize: "0.75rem", color: "rgba(255,255,255,0.35)" }}>
-              {authMode === "login" ? "Sign in to use AutoSlay" : "Start autofilling forms for free"}
+              {authMode === "login" ? "Sign in to use Fillux" : "Start autofilling forms for free"}
             </p>
           </div>
 
@@ -593,7 +593,7 @@ export default function ExtensionPopup() {
           <div style={{ padding: "0.875rem 1rem 0.5rem", flexShrink: 0 }}>
             <p style={{ margin: 0, fontSize: "0.875rem", fontWeight: 700 }}>Complete Your Profile</p>
             <p style={{ margin: "0.2rem 0 0", fontSize: "0.6875rem", color: "rgba(255,255,255,0.35)" }}>
-              Saved once — AutoSlay fills any form from this.
+              Saved once — Fillux fills any form from this.
             </p>
           </div>
 

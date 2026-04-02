@@ -1,9 +1,9 @@
 /**
- * AUTOSLAY AGENT — Content Script (v2)
- * Runs inside every webpage. Listens for AUTOSLAY_FILL from the popup.
+ * FILLUX — Content Script (v2)
+ * Runs inside every webpage. Listens for FILLUX_FILL from the popup.
  */
 
-console.log("⚡ AutoSlay content script loaded.");
+console.log("⚡ Fillux content script loaded.");
 
 /* ══════════════════════════════════════════════════════
    COMPREHENSIVE FIELD MAP
@@ -303,19 +303,19 @@ async function fillForm(profile) {
    MESSAGE LISTENER
 ══════════════════════════════════════════════════════ */
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.action === "AUTOSLAY_FILL") {
-    console.log("⚡ AutoSlay: Starting fill with profile keys:", Object.keys(request.profile));
+  if (request.action === "FILLUX_FILL") {
+    console.log("⚡ Fillux: Starting fill with profile keys:", Object.keys(request.profile));
     fillForm(request.profile).then(({ filled, log }) => {
-      console.log(`⚡ AutoSlay: Filled ${filled} fields.`, log);
+      console.log(`⚡ Fillux: Filled ${filled} fields.`, log);
       sendResponse({ status: "done", filled, log });
     }).catch(err => {
-      console.error("⚡ AutoSlay fill error:", err);
+      console.error("⚡ Fillux fill error:", err);
       sendResponse({ status: "error", filled: 0, log: [] });
     });
     return true; // Keep message channel open for async response
   }
 
-  if (request.action === "AUTOSLAY_PING") {
+  if (request.action === "FILLUX_PING") {
     sendResponse({ status: "ready" });
     return true;
   }

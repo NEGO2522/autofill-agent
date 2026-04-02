@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "AutoSlay Agent",
+  "name": "Fillux",
   "version": "1.1.0",
-  "description": "Smart form autofill agent — fill any form in one click using your saved profile.",
+  "description": "Fillux — Smart form autofill agent. Fill any form in one click using your saved profile.",
   "permissions": ["storage", "activeTab", "scripting", "tabs"],
   "host_permissions": ["https://*/*", "http://*/*"],
   "icons": {
@@ -12,7 +12,7 @@
   },
   "action": {
     "default_popup": "index.html",
-    "default_title": "AutoSlay Agent",
+    "default_title": "Fillux",
     "default_icon": {
       "16": "icon16.png",
       "48": "icon48.png",

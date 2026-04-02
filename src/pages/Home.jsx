@@ -78,7 +78,7 @@ export default function Home() {
 
       // 3. Send message to content.js
       chrome.tabs.sendMessage(tab.id, { 
-        action: "AUTOSLAY_FILL", 
+        action: "FILLUX_FILL", 
         profile: profileData 
       }, (response) => {
         if (chrome.runtime.lastError) {
@@ -87,7 +87,7 @@ export default function Home() {
            return;
         }
         if (response && response.status === "done") {
-          alert(`⚡ AutoSlay filled ${response.filled} field(s) successfully!`);
+          alert(`⚡ Fillux filled ${response.filled} field(s) successfully!`);
         }
         setFilling(false);
       });
@@ -151,7 +151,7 @@ export default function Home() {
             alignItems: "center", justifyContent: "center",
             fontSize: "0.8125rem", fontWeight: 900,
           }}>⚡</div>
-          <span style={{ fontSize: "0.9375rem", fontWeight: 700, letterSpacing: "-0.02em" }}>AutoSlay</span>
+          <span style={{ fontSize: "0.9375rem", fontWeight: 700, letterSpacing: "-0.02em" }}>Fillux</span>
         </div>
 
         {/* Right side */}
@@ -256,7 +256,7 @@ export default function Home() {
                   color: "white",
                 }}>
                   Welcome to<br />
-                  <span style={{ color: "rgba(255,255,255,0.2)" }}>AutoSlay.</span>
+                  <span style={{ color: "rgba(255,255,255,0.2)" }}>Fillux.</span>
                 </h1>
                 <p style={{
                   marginTop: "1rem", marginBottom: 0,
@@ -265,7 +265,7 @@ export default function Home() {
                   lineHeight: 1.75,
                   maxWidth: 360,
                 }}>
-                  Fill any form in one click — job applications, hackathons, events, registrations, and more. Save your details once, AutoSlay handles the rest.
+                  Fill any form in one click — job applications, hackathons, events, registrations, and more. Save your details once, Fillux handles the rest.
                 </p>
               </div>
 
@@ -276,8 +276,8 @@ export default function Home() {
               <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
                 {[
                   { n: "01", title: "Save your profile details",    desc: "Name, email, resume, skills — once and done." },
-                  { n: "02", title: "Enable extension on browser",  desc: "Download & enable AutoSlay on Chrome." },
-                  { n: "03", title: "Open any form → one-click fill", desc: "Jobs, events, hackathons — AutoSlay fills it all." },
+                  { n: "02", title: "Enable extension on browser",  desc: "Download & enable Fillux on Chrome." },
+                  { n: "03", title: "Open any form → one-click fill", desc: "Jobs, events, hackathons — Fillux fills it all." },
                 ].map(({ n, title, desc }) => (
                   <div key={n} style={{ display: "flex", gap: "1rem", alignItems: "flex-start" }}>
                     <div style={{
@@ -429,7 +429,7 @@ export default function Home() {
                     color: S.muted, lineHeight: 1.7,
                     maxWidth: 260,
                   }}>
-                    Download AutoSlay for Chrome and start autofilling job applications, events, hackathons, and more.
+                    Download Fillux for Chrome and start autofilling job applications, events, hackathons, and more.
                   </p>
                 </div>
 
