@@ -815,7 +815,7 @@ export default function ExtensionPopup() {
 
           {/* Edit details button */}
           <button
-            onClick={() => window.open("https://autoslay.vercel.app/dashboard", "_blank")}
+            onClick={() => { setProfile(null); setView("profile-setup"); }}
             style={{
               display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem",
               padding: "0.6875rem",
