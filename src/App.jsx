@@ -5,6 +5,7 @@ import Home           from './pages/Home';
 import Form           from './pages/Form';
 import ExtensionPopup from './pages/ExtensionPopup';
 import Contact        from './components/Contact';
+import Privacy        from './pages/Privacy';
 
 /**
  * Reliable extension detection:
@@ -40,6 +41,7 @@ function App() {
           <Route path="/home"    element={<Home />}    />
           <Route path="/form"    element={<Form />}    />
           <Route path="/contact" element={<Contact />} />
+          <Route path="/privacy" element={<Privacy />} /> 
         </Routes>
       </HashRouter>
     </AuthProvider>
