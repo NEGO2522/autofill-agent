@@ -13,16 +13,16 @@ const FIELD_MAP = [
   // Identity
   { keys: ["firstname","first_name","first name","fname","given name","given_name"],       profile: "firstName"               },
   { keys: ["lastname","last_name","last name","lname","surname","family name","last_name"], profile: "lastName"                },
-  { keys: ["fullname","full_name","full name","your name","participant name","name"],       profile: "__fullName"              },
-  { keys: ["email","e-mail","mail","email address","emailaddress","email_address"],         profile: "email"                   },
-  { keys: ["phone","mobile","contact","phonenumber","phone_number","mobile number","contact number","whatsapp","ph"], profile: "phone" },
+  { keys: ["fullname","full_name","full name","your name","participant name","name","first & last name"],   profile: "__fullName"              },
+  { keys: ["email","e-mail","mail","email address","emailaddress","email_address","email id","emailid"],     profile: "email"                   },
+  { keys: ["phone","mobile","contact","phonenumber","phone_number","mobile number","contact number","whatsapp","ph","mob"], profile: "phone" },
   { keys: ["dob","date of birth","birth date","birthday","dateofbirth","date_of_birth"],   profile: "dob"                     },
   { keys: ["gender","sex"],                                                                 profile: "gender"                  },
 
   // Address
   { keys: ["address","address1","street","street address","house","addr"],                  profile: "address1"                },
   { keys: ["address2","apartment","suite","flat","apt"],                                    profile: "address2"                },
-  { keys: ["city","town","district"],                                                       profile: "city"                    },
+  { keys: ["city","town","district","location","city & state","city and state"],            profile: "city"                    },
   { keys: ["state","province","region"],                                                    profile: "state"                   },
   { keys: ["pincode","zip","postal","zipcode","postalcode","pin","zip code","postal code"], profile: "pincode"                 },
   { keys: ["country"],                                                                      profile: "country"                 },
@@ -107,7 +107,12 @@ function setNativeValue(el, value) {
 ══════════════════════════════════════════════════════ */
 function getFieldHints(el) {
   const raw = [];
-  const add = (v) => { if (v && typeof v === "string") raw.push(v.toLowerCase().trim()); };
+  const add = (v) => {
+    if (v && typeof v === "string") {
+      const clean = v.toLowerCase().trim().replace(/[:*]/g, "");
+      if (clean) raw.push(clean);
+    }
+  };
 
   add(el.name);
   add(el.id);
@@ -121,12 +126,44 @@ function getFieldHints(el) {
   // Associated <label for="id">
   if (el.id) {
     const lbl = document.querySelector(`label[for="${CSS.escape(el.id)}"]`);
-    if (lbl) add(lbl.innerText.trim());
+    if (lbl) add(lbl.innerText);
+  }
+
+  // aria-labelledby
+  const labelledBy = el.getAttribute("aria-labelledby");
+  if (labelledBy) {
+    labelledBy.split(/\s+/).forEach(id => {
+      const lbl = document.getElementById(id);
+      if (lbl) add(lbl.innerText);
+    });
   }
 
   // Wrapping <label>
   const parentLabel = el.closest("label");
-  if (parentLabel) add(parentLabel.innerText.trim());
+  if (parentLabel) add(parentLabel.innerText);
+
+  // Google Forms & modern apps: walk up and find "label-like" text
+  // We look for a container that might contain both the label and the input
+  let runner = el.parentElement;
+  let depth = 0;
+  while (runner && depth < 5) {
+    // Check for role="heading" or common label classes
+    const heading = runner.querySelector('[role="heading"], [role="label"], .M7pj6b, .m7ZMe');
+    if (heading) {
+      add(heading.innerText);
+      break; 
+    }
+    
+    // If we find text that isn't too long, it might be the label
+    const text = runner.innerText?.split("\n")[0]?.trim();
+    if (text && text.length > 1 && text.length < 100) {
+      // Avoid taking current input's value as hint
+      if (text !== el.value) add(text);
+    }
+
+    runner = runner.parentElement;
+    depth++;
+  }
 
   // Previous sibling that looks like a label
   const prev = el.previousElementSibling;
@@ -135,21 +172,14 @@ function getFieldHints(el) {
     if (t && t.length < 80) add(t);
   }
 
-  // Nearest wrapping div/fieldset label
-  const wrap = el.closest("div, fieldset, li, section");
-  if (wrap) {
-    const wrapLabel = wrap.querySelector("label");
-    if (wrapLabel && !wrapLabel.contains(el)) add(wrapLabel.innerText.trim());
-  }
-
-  return [...new Set(raw)].filter(h => h.length > 0 && h.length < 100);
+  return [...new Set(raw)].filter(h => h.length > 0 && h.length < 120);
 }
 
 /* ══════════════════════════════════════════════════════
    MATCH HINTS → PROFILE VALUE
 ══════════════════════════════════════════════════════ */
 function findProfileValue(hints, profile) {
-  // Build full name
+  // Build helper fields
   const fullProfile = {
     ...profile,
     __fullName: [profile.firstName, profile.lastName].filter(Boolean).join(" "),
@@ -159,7 +189,14 @@ function findProfileValue(hints, profile) {
     for (const keyword of entry.keys) {
       for (const hint of hints) {
         if (hint.includes(keyword) || keyword.includes(hint)) {
-          const val = fullProfile[entry.profile];
+          // Try primary profile key
+          let val = fullProfile[entry.profile];
+          
+          // Mismatch fallbacks
+          if (!val && entry.profile === "city") val = profile.location;
+          if (!val && entry.profile === "state") val = profile.location;
+          if (!val && entry.profile === "pincode") val = profile.zip || profile.zipcode;
+          
           if (val && String(val).trim()) return String(val).trim();
         }
       }
@@ -214,34 +251,38 @@ async function fillForm(profile) {
 
   const delay = (ms) => new Promise(r => setTimeout(r, ms));
 
-  // All visible, interactive form elements
+// All visible, interactive form elements
   const selector = [
     "input:not([type='hidden']):not([type='submit']):not([type='button']):not([type='image'])",
     "textarea",
     "select",
     "input[type='checkbox']",
     "input[type='radio']",
+    "[role='checkbox']",
+    "[role='radio']",
+    "[role='option']",
+    ".whsOnd", // Google Forms specialized inputs
   ].join(", ");
 
   const elements = Array.from(document.querySelectorAll(selector));
 
   for (const el of elements) {
     // Skip invisible / disabled / readonly
-    if (el.offsetParent === null && el.type !== "hidden") continue;
-    if (el.disabled) continue;
+    // Note: Some custom elements might have 0 offsetParent but be visible via ARIA
+    const isCustom = el.getAttribute("role") || el.classList.contains("whsOnd");
+    if (el.offsetParent === null && el.type !== "hidden" && !isCustom) continue;
+    if (el.disabled || el.getAttribute("aria-disabled") === "true") continue;
     if (el.readOnly) continue;
-
-    const rect = el.getBoundingClientRect();
-    if (rect.width === 0 && rect.height === 0 && el.type !== "hidden") continue;
 
     const hints = getFieldHints(el);
     if (hints.length === 0) continue;
 
-    // ── Checkbox ──
-    if (el.type === "checkbox") {
+    // ── Checkbox (Standard & Custom) ──
+    if (el.type === "checkbox" || el.getAttribute("role") === "checkbox") {
       const combined = hints.join(" ");
       if (AUTO_CHECK_KEYWORDS.some(k => combined.includes(k))) {
-        if (!el.checked) {
+        const isChecked = el.type === "checkbox" ? el.checked : (el.getAttribute("aria-checked") === "true");
+        if (!isChecked) {
           el.click();
           log.push(`☑️ Checked: ${hints[0]}`);
           filled++;
@@ -251,18 +292,22 @@ async function fillForm(profile) {
       continue;
     }
 
-    // ── Radio ──
-    if (el.type === "radio") {
+    // ── Radio (Standard & Custom) ──
+    if (el.type === "radio" || el.getAttribute("role") === "radio") {
       const value = findProfileValue(hints, profile);
       if (value) {
-        const radioVal = el.value.toLowerCase();
+        // For radio, we check the label text or the value attribute
+        const radioText = (el.innerText || el.getAttribute("value") || el.getAttribute("aria-label") || "").toLowerCase();
         const profileVal = value.toLowerCase();
-        if (radioVal.includes(profileVal) || profileVal.includes(radioVal)) {
-          el.checked = true;
-          el.dispatchEvent(new Event("change", { bubbles: true }));
-          log.push(`🔘 Selected radio: ${hints[0]} → ${el.value}`);
-          filled++;
-          await delay(60);
+        
+        if (radioText.includes(profileVal) || profileVal.includes(radioText)) {
+          const isSelected = el.type === "radio" ? el.checked : (el.getAttribute("aria-checked") === "true");
+          if (!isSelected) {
+            el.click();
+            log.push(`🔘 Selected radio: ${hints[0]} → ${value}`);
+            filled++;
+            await delay(60);
+          }
         }
       }
       continue;
