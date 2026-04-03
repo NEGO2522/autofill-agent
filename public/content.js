@@ -10,33 +10,16 @@ console.log("⚡ Fillux content script loaded.");
    Each entry: { keys: string[], profile: keyof profile }
 ══════════════════════════════════════════════════════ */
 const FIELD_MAP = [
-  // Identity
-  { keys: ["firstname","first_name","first name","fname","given name","given_name"],       profile: "firstName"               },
-  { keys: ["lastname","last_name","last name","lname","surname","family name","last_name"], profile: "lastName"                },
-  { keys: ["fullname","full_name","full name","your name","participant name","name","first & last name"],   profile: "__fullName"              },
-  { keys: ["email","e-mail","mail","email address","emailaddress","email_address","email id","emailid"],     profile: "email"                   },
-  { keys: ["phone","mobile","contact","phonenumber","phone_number","mobile number","contact number","whatsapp","ph","mob"], profile: "phone" },
-  { keys: ["dob","date of birth","birth date","birthday","dateofbirth","date_of_birth"],   profile: "dob"                     },
-  { keys: ["gender","sex","identity","identify as","your gender"],                                profile: "gender"                  },
-
-  // Address
-  { keys: ["address","address1","street","street address","house","addr"],                  profile: "address1"                },
-  { keys: ["address2","apartment","suite","flat","apt"],                                    profile: "address2"                },
-  { keys: ["city","town","district","location","city & state","city and state"],            profile: "city"                    },
-  { keys: ["state","province","region"],                                                    profile: "state"                   },
-  { keys: ["pincode","zip","postal","zipcode","postalcode","pin","zip code","postal code"], profile: "pincode"                 },
-  { keys: ["country"],                                                                      profile: "country"                 },
-
-  // Education
-  { keys: ["college","university","institution","school","collegename","university name","institute","college name","clg"], profile: "collegeName" },
+  // 1. Education (High priority to avoid 'name' collision)
+  { keys: ["college","university","institution","school","collegename","university name","institute","college name","clg","campus"], profile: "collegeName" },
   { keys: ["degree","qualification","program","course","branch","degreename","degree name","stream","major"],               profile: "degreeName"  },
-  { keys: ["current year","currentyear","study year","yearofstudy","year of study","semester","sem","year of study"],       profile: "year"        },
+  { keys: ["current year","currentyear","study year","yearofstudy","year of study","semester","sem"],                        profile: "year"        },
   { keys: ["graduation year","graduationyear","passing year","passout","passout year","expected graduation","graduating year","batch","passout_year"], profile: "expectedGraduationYear" },
   { keys: ["rollno","roll","rollnumber","roll number","student id","enrollment","registrationnumber","reg no","reg_no","roll_no"], profile: "rollNumber" },
   { keys: ["cgpa","gpa","percentage","marks","score","aggregate","grades"],                 profile: "cgpa"                    },
 
-  // Professional
-  { keys: ["organization","org","company","employer","workplace","company name","organisation"], profile: "organization"       },
+  // 2. Professional
+  { keys: ["organization","org","company","employer","workplace","company name","organisation","firm"],                     profile: "organization"       },
   { keys: ["jobtitle","job title","designation","job role","position","title"],             profile: "jobTitle"                },
   { keys: ["experience","work experience","years of experience","exp","yoe"],               profile: "experience"              },
   { keys: ["skills","technical skills","technologies","tech stack","expertise","skillset","skill set","tools"], profile: "skills" },
@@ -44,35 +27,38 @@ const FIELD_MAP = [
   { keys: ["expectedctc","expected ctc","expected salary","expected package"],              profile: "expectedCtc"             },
   { keys: ["notice","notice period","noticeperiod","availability","joining"],               profile: "noticePeriod"            },
 
-  // Social / Links
+  // 3. Hackathon / Team / Social
+  { keys: ["team name","teamname","team_name","your team"],                                 profile: "teamName"                },
+  { keys: ["team size","teamsize","team_size","no of members","number of members"],         profile: "teamSize"                },
+  { keys: ["project name","projectname","project title","project_name"],                    profile: "projectName"             },
+  { keys: ["github repo","githublink","repo link","repository","repo url","github repository"], profile: "github"              },
   { keys: ["linkedin","linkedin url","linkedin profile","linkedin_url"],                    profile: "linkedin"                },
   { keys: ["github","github url","github profile","github link","github_url"],              profile: "github"                  },
   { keys: ["portfolio","website","personal website","portfolio url","personal site"],       profile: "portfolio"               },
-  { keys: ["twitter","twitter handle","twitter url","twitter_url"],                         profile: "twitter"                 },
-  { keys: ["leetcode","leetcode url","leetcode profile"],                                   profile: "leetcode"                },
-  { keys: ["instagram","instagram url","instagram handle"],                                 profile: "instagram"               },
 
-  // Hackathon / Team
-  { keys: ["team name","teamname","team_name","your team"],                                 profile: "teamName"                },
-  { keys: ["team size","teamsize","team_size","no of members","number of members"],         profile: "teamSize"                },
-  { keys: ["team role","teamrole","your role","role in team","team_role"],                  profile: "teamRole"                },
-  { keys: ["project name","projectname","project title","project_name"],                    profile: "projectName"             },
-  { keys: ["project description","projectdescription","project idea","idea","abstract","project abstract","project_description"], profile: "projectDescription" },
-  { keys: ["github repo","githublink","repo link","repository","repo url","github repository"], profile: "github"              },
-  { keys: ["demo link","demolink","demo url","live link","deployed link","demo_link"],      profile: "demoLink"                },
-  { keys: ["achievements","achievement","awards","accomplishments"],                         profile: "achievements"            },
+  // 4. Identity (Lower priority to allow specific 'name' fields like 'college name' to match first)
+  { keys: ["firstname","first_name","first name","fname","given name","given_name"],       profile: "firstName"               },
+  { keys: ["lastname","last_name","last name","lname","surname","family name"],             profile: "lastName"                },
+  { keys: ["fullname","full_name","full name","your name","participant name","candidate name","first & last name"], profile: "__fullName" },
+  { keys: ["email","e-mail","mail","email address","emailaddress","email_address","email id","emailid"],     profile: "email"                   },
+  { keys: ["phone","mobile","contact","phonenumber","phone_number","mobile number","contact number","whatsapp","ph","mob"], profile: "phone" },
+  { keys: ["gender","sex","identity","identify as","your gender"],                                profile: "gender"                  },
+  { keys: ["dob","date of birth","birth date","birthday","dateofbirth","date_of_birth"],   profile: "dob"                     },
 
-  // Documents
+  // 5. Address
+  { keys: ["address","address1","street","street address","house","addr"],                  profile: "address1"                },
+  { keys: ["city","town","district","location","city & state","city and state"],            profile: "city"                    },
+  { keys: ["state","province","region"],                                                    profile: "state"                   },
+  { keys: ["pincode","zip","postal","zipcode","postalcode","pin","zip code","postal code"], profile: "pincode"                 },
+  { keys: ["country"],                                                                      profile: "country"                 },
+
+  // 6. Documents & Misc
   { keys: ["resume","cv","resume url","resume link","resumeurl","resume_url","upload resume"], profile: "resumeURL"            },
+  { keys: ["bio","about","about you","about yourself","introduction","intro","tell us about yourself"], profile: "bio"       },
+  { keys: ["why us","whyus","why do you want","motivation","why join","why hackathon","why participate"], profile: "whyUs"    },
+  { keys: ["message","additional info","anything else","comments","remarks","other details"], profile: "message"             },
 
-  // Bio / Long-form
-  { keys: ["bio","about","about you","about yourself","introduction","intro","tell us about yourself","describe yourself"], profile: "bio" },
-  { keys: ["why us","whyus","why do you want","motivation","why join","why hackathon","why participate","why_us"],          profile: "whyUs" },
-  { keys: ["strengths","strength","your strengths","key strengths"],                        profile: "strengths"               },
-  { keys: ["hobbies","hobby","interests","interest","passions"],                             profile: "hobbies"                 },
-  { keys: ["message","additional info","anything else","comments","remarks","other details","additional comments"], profile: "message" },
-
-  // Yes/No questions (Hackathon specific)
+  // 7. Yes/No questions
   { keys: ["first hackathon","first time","first timer","have you ever been"],               profile: "firstHackathon"          },
   { keys: ["team ready","formed a team","team formed","pre-formed team"],                    profile: "teamFormed"              },
   { keys: ["dietary","food","vegetarian","meal","allergy","accessibility"],                  profile: "dietaryNeeds"            },
