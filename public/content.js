@@ -17,7 +17,7 @@ const FIELD_MAP = [
   { keys: ["email","e-mail","mail","email address","emailaddress","email_address","email id","emailid"],     profile: "email"                   },
   { keys: ["phone","mobile","contact","phonenumber","phone_number","mobile number","contact number","whatsapp","ph","mob"], profile: "phone" },
   { keys: ["dob","date of birth","birth date","birthday","dateofbirth","date_of_birth"],   profile: "dob"                     },
-  { keys: ["gender","sex"],                                                                 profile: "gender"                  },
+  { keys: ["gender","sex","identity","identify as","your gender"],                                profile: "gender"                  },
 
   // Address
   { keys: ["address","address1","street","street address","house","addr"],                  profile: "address1"                },
@@ -71,6 +71,11 @@ const FIELD_MAP = [
   { keys: ["strengths","strength","your strengths","key strengths"],                        profile: "strengths"               },
   { keys: ["hobbies","hobby","interests","interest","passions"],                             profile: "hobbies"                 },
   { keys: ["message","additional info","anything else","comments","remarks","other details","additional comments"], profile: "message" },
+
+  // Yes/No questions (Hackathon specific)
+  { keys: ["first hackathon","first time","first timer","have you ever been"],               profile: "firstHackathon"          },
+  { keys: ["team ready","formed a team","team formed","pre-formed team"],                    profile: "teamFormed"              },
+  { keys: ["dietary","food","vegetarian","meal","allergy","accessibility"],                  profile: "dietaryNeeds"            },
 ];
 
 const AUTO_CHECK_KEYWORDS = [
@@ -165,11 +170,17 @@ function getFieldHints(el) {
     depth++;
   }
 
-  // Previous sibling that looks like a label
-  const prev = el.previousElementSibling;
-  if (prev && ["LABEL","SPAN","P","H3","H4","DIV"].includes(prev.tagName)) {
-    const t = prev.innerText?.trim();
+  // Next sibling that looks like a label (common for radio/checkbox)
+  const next = el.nextElementSibling;
+  if (next && ["LABEL","SPAN","P","H3","H4","DIV"].includes(next.tagName)) {
+    const t = next.innerText?.trim();
     if (t && t.length < 80) add(t);
+  }
+
+  // Parent's text (if short)
+  if (el.parentElement) {
+    const pt = el.parentElement.innerText?.split("\n")[0]?.trim();
+    if (pt && pt.length > 1 && pt.length < 100) add(pt);
   }
 
   return [...new Set(raw)].filter(h => h.length > 0 && h.length < 120);
@@ -182,6 +193,7 @@ function findProfileValue(hints, profile) {
   // Build helper fields
   const fullProfile = {
     ...profile,
+    ...(profile.yesNoFields || {}),
     __fullName: [profile.firstName, profile.lastName].filter(Boolean).join(" "),
   };
 
@@ -296,11 +308,17 @@ async function fillForm(profile) {
     if (el.type === "radio" || el.getAttribute("role") === "radio") {
       const value = findProfileValue(hints, profile);
       if (value) {
-        // For radio, we check the label text or the value attribute
-        const radioText = (el.innerText || el.getAttribute("value") || el.getAttribute("aria-label") || "").toLowerCase();
         const profileVal = value.toLowerCase();
         
-        if (radioText.includes(profileVal) || profileVal.includes(radioText)) {
+        // Match if the profile value is mentioned in this specific radio button's hints
+        // but the hint shouldn't JUST be the group name (like 'gender')
+        const isMatch = hints.some(h => {
+          const hh = h.toLowerCase();
+          // The hint must contain the profile value (e.g., 'male')
+          return (hh.includes(profileVal) || profileVal.includes(hh)) && hh.length > 1;
+        });
+
+        if (isMatch) {
           const isSelected = el.type === "radio" ? el.checked : (el.getAttribute("aria-checked") === "true");
           if (!isSelected) {
             el.click();
